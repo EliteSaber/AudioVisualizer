@@ -16,4 +16,12 @@
     <PackageReference Include="NAudio" Version="3.1.0" />
   </ItemGroup>
 
+<ItemGroup>
+    <!--
+      UseWPF сужает набор неявных using'ов: System.IO в него не входит. Возвращаем явно,
+      файлы аудио работают с файлами и потоками.
+    -->
+    <Using Include="System.IO" />
+  </ItemGroup>
+
 </Project>

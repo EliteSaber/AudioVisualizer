@@ -44,9 +44,15 @@ public partial class MainWindow : Window
     }
 
     // Настройки сохраняются при выходе, а не на каждое движение ползунка: иначе файл
-    // переписывался бы десятки раз в секунду.
+    // переписывался бы десятки раз в секунду. Выгрузка видео при этом отменяется.
     private void OnClosed(object? sender, EventArgs args)
-        => (DataContext as MainViewModel)?.SaveSettingsCommand.Execute(null);
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.SaveSettingsCommand.Execute(null);
+            viewModel.Dispose();
+        }
+    }
 
     /// <summary>
     /// Пользователь тронул ползунок: пока он его держит, позицией владеет он, а не таймер,

@@ -1,7 +1,7 @@
 using System.IO;
 using System.Windows.Threading;
-using AudioVisualizer.Core.Analysis;
 using AudioVisualizer.Core.Audio;
+using AudioVisualizer.Core.Export;
 using AudioVisualizer.Core.Rendering;
 using AudioVisualizer.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -13,7 +13,7 @@ namespace AudioVisualizer.App.ViewModels;
 /// <summary>
 /// Состояние окна: открытый файл, воспроизведение, кадр превью и панель настроек.
 /// </summary>
-public sealed partial class MainViewModel : ObservableObject
+public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     /// <summary>
     /// Фильтр диалога открытия в формате Win32: пары «описание | шаблон», расширения
@@ -25,6 +25,9 @@ public sealed partial class MainViewModel : ObservableObject
         "*.mp3;*.wav;*.flac;*.m4a;*.aac;*.ogg;*.opus;*.wma;*.aiff;*.aif;*.m4b|" +
         "Все файлы (*.*)|*.*";
 
+    /// <summary>Фильтр сохранения видео в формате Win32: та же ошибка видна только по клику.</summary>
+    public const string VideoFileFilter = "Видео MP4 (*.mp4)|*.mp4";
+
     private const int MaximumFramesPerSecond = 60;
 
     /// <summary>Меньше этой разницы перемотка считается щелчком по бегунку без переноса.</summary>
@@ -33,18 +36,27 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly AppSettingsStore _store;
     private readonly AudioLoader _loader;
     private readonly IAudioPlayer _player;
+    private readonly IVideoExporter _exporter;
 
     private AudioData? _audio;
-    private SpectrumPipeline? _pipeline;
+    private SpectrumFrameSource? _frames;
     private string? _audioPath;
     private DispatcherTimer? _timer;
+    private CancellationTokenSource? _exportCancellation;
+    private VideoExportProgress? _progress;
+    private bool _isCancelling;
     private bool _isScrubbing;
 
-    public MainViewModel(AppSettingsStore? store = null, AudioLoader? loader = null, IAudioPlayer? player = null)
+    public MainViewModel(
+        AppSettingsStore? store = null,
+        AudioLoader? loader = null,
+        IAudioPlayer? player = null,
+        IVideoExporter? exporter = null)
     {
         _store = store ?? new AppSettingsStore();
         _loader = loader ?? new AudioLoader();
         _player = player ?? new AudioPlayer();
+        _exporter = exporter ?? new Mp4Exporter();
 
         Settings = new SettingsViewModel(_store.Load());
         Settings.Changed += OnSettingsChanged;
@@ -74,6 +86,43 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isPlaying;
 
     [ObservableProperty] private bool _hasTrack;
+
+    /// <summary>Идёт выгрузка видео: кнопки экспорта блокируются, а появляется прогресс.</summary>
+    [ObservableProperty] private bool _isExporting;
+
+    /// <summary>Доля выгруженных кадров от 0 до 1.</summary>
+    [ObservableProperty] private double _exportProgress;
+
+    public bool CanExport => HasTrack && !IsExporting;
+
+    /// <summary>Ход выгрузки словами: в процентах проценты не нужны, нужен остаток времени.</summary>
+    public string ExportProgressText
+    {
+        get
+        {
+            if (!IsExporting)
+            {
+                return string.Empty;
+            }
+
+            if (_isCancelling)
+            {
+                // Отмена уже нажата, но ffmpeg ещё добивает очередной кадр: полоса перестаёт
+                // расти, а надпись перестаёт вводить в заблуждение.
+                return "Отмена...";
+            }
+
+            if (_progress is null)
+            {
+                return "Подготовка кадров...";
+            }
+
+            var percent = (int)(_progress.Fraction * 100d);
+            var remaining = _progress.Remaining is { } left ? $", осталось {left:hh\\:mm\\:ss}" : string.Empty;
+
+            return $"Кадр {_progress.FramesDone} из {_progress.TotalFrames}, {percent}%{remaining}";
+        }
+    }
 
     /// <summary>Позиция в секундах. Публикуется окну через <see cref="PositionChanged"/>.</summary>
     [ObservableProperty] private double _positionSeconds;
@@ -133,6 +182,105 @@ public sealed partial class MainViewModel : ObservableObject
         UpdatePreview();
     }
 
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private async Task ExportVideo()
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Сохранить видео",
+            Filter = VideoFileFilter,
+            DefaultExt = ".mp4",
+            AddExtension = true,
+            FileName = _audioPath is null ? "видео.mp4" : Path.GetFileNameWithoutExtension(_audioPath) + ".mp4"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            await ExportVideoAsync(dialog.FileName);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(IsExporting))]
+    private void CancelExport()
+    {
+        _isCancelling = true;
+
+        try
+        {
+            _exportCancellation?.Cancel();
+        }
+        catch (AggregateException)
+        {
+            // Отмена подписки не должна ронять приложение из обработчика команды: пользователь
+            // уже получил то, чего хотел, остальное - частности уборки.
+        }
+    }
+
+    /// <summary>
+    /// Выгружает видео в <paramref name="outputPath"/>. Диалог сохранения живёт в команде,
+    /// а сама выгрузка - здесь, чтобы её можно было проверить тестом без диалога.
+    /// </summary>
+    public async Task ExportVideoAsync(string outputPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+
+        if (_audio is null)
+        {
+            Status = "Сначала откройте аудиофайл.";
+            return;
+        }
+
+        // Рендер идёт на всех ядрах и занимает UI: звук на том же треке мешал бы и себе,
+        // и выгрузке, поэтому воспроизведение на время выгрузки останавливается.
+        Pause();
+        StopTimer();
+
+        var request = new VideoExportRequest(_audio, Settings.ToAppSettings(), outputPath);
+
+        // Источник отмены живёт в локальной переменной, а поле нужно только кнопке «отмена».
+        // При закрытии окна поле обнуляется, и обращение к нему в конце выгрузки упало бы.
+        using var cancellation = new CancellationTokenSource();
+
+        _exportCancellation = cancellation;
+        _isCancelling = false;
+        _progress = null;
+        ExportProgress = 0d;
+        IsExporting = true;
+        IsBusy = true;
+        Status = $"Выгрузка {Path.GetFileName(outputPath)}...";
+
+        try
+        {
+            var result = await _exporter.ExportAsync(
+                request,
+                new Progress<VideoExportProgress>(OnExportProgress),
+                cancellation.Token);
+
+            if (result.Cancelled)
+            {
+                Status = "Выгрузка отменена.";
+                return;
+            }
+
+            ExportProgress = 1d;
+            Status = $"Готово: {result.Frames} кадров за {result.Elapsed:mm\\:ss}, {Path.GetFileName(result.Path)}";
+        }
+        catch (Exception exception)
+        {
+            Status = "Не удалось выгрузить видео: " + exception.Message;
+        }
+        finally
+        {
+            if (ReferenceEquals(_exportCancellation, cancellation))
+            {
+                _exportCancellation = null;
+            }
+
+            IsExporting = false;
+            IsBusy = false;
+        }
+    }
+
     public async Task LoadFileAsync(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -147,7 +295,7 @@ public sealed partial class MainViewModel : ObservableObject
 
             _audio = audio;
             _audioPath = path;
-            _pipeline = new SpectrumPipeline(Settings.ToAppSettings().Spectrum, audio.SampleRate);
+            _frames = CreateFrameSource(audio);
 
             FileTitle = Path.GetFileName(path);
             Duration = audio.Duration;
@@ -338,31 +486,68 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (_audio is not null)
         {
-            _pipeline = new SpectrumPipeline(settings.Spectrum, _audio.SampleRate);
+            _frames = new SpectrumFrameSource(_audio, settings.Spectrum, BarCount(settings));
         }
 
         UpdatePreview();
     }
 
     /// <summary>
-    /// Пересчитывает кадр под заданный момент трека. Превью и экспорт идут через один и тот же
-    /// <see cref="SpectrumPipeline"/> и по одним и тем же сэмплам, иначе картинка в mp4
+    /// Пересчитывает кадр под заданный момент трека. Превью и выгрузка идут через один и тот же
+    /// <see cref="SpectrumFrameSource"/> и по одним и тем же сэмплам, иначе картинка в mp4
     /// разошлась бы с тем, что видно на экране.
     /// </summary>
     private void UpdatePreview(TimeSpan? position = null)
     {
         var settings = SettingsNormalizer.Normalize(Settings.ToAppSettings());
         var bars = settings.Bars;
-        var layout = new BarLayout(PreviewWidth, PreviewHeight, bars);
 
-        var values = new float[layout.BarCount];
-
-        if (_audio is not null && _pipeline is not null)
-        {
-            var startIndex = (int)((position ?? TimeSpan.Zero).TotalSeconds * _audio.SampleRate);
-            values = _pipeline.AnalyzeBars(_audio.Samples, startIndex, layout.BarCount);
-        }
+        var values = _frames is null
+            ? new float[BarCount(settings)]
+            : _frames.GetBars(position ?? TimeSpan.Zero);
 
         Snapshot = new SpectrumSnapshot(values, settings.Colors, bars);
+    }
+
+    /// <summary>
+    /// Столько значений, сколько столбиков влезет в кадр настроек: превью и видео одного
+    /// размера, поэтому и число столбиков у них одно.
+    /// </summary>
+    private int BarCount(AppSettings settings) => new BarLayout(PreviewWidth, PreviewHeight, settings.Bars).BarCount;
+
+    private SpectrumFrameSource CreateFrameSource(AudioData audio)
+        => new(audio, SettingsNormalizer.Normalize(Settings.ToAppSettings()).Spectrum, BarCount(SettingsNormalizer.Normalize(Settings.ToAppSettings())));
+
+    private void OnExportProgress(VideoExportProgress progress)
+    {
+        _progress = progress;
+        ExportProgress = progress.Fraction;
+    }
+
+    partial void OnIsExportingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ExportProgressText));
+        ExportVideoCommand.NotifyCanExecuteChanged();
+        CancelExportCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnExportProgressChanged(double value) => OnPropertyChanged(nameof(ExportProgressText));
+
+    partial void OnHasTrackChanged(bool value) => ExportVideoCommand.NotifyCanExecuteChanged();
+
+    /// <summary>
+    /// Вызывается при закрытии окна. Выгрузка отменяется, а не просто забывается:
+    /// иначе вместе с интерфейсом останутся процесс ffmpeg и поток рендера.
+    /// </summary>
+    public void Dispose()
+    {
+        _exportCancellation?.Cancel();
+        _exportCancellation?.Dispose();
+        _exportCancellation = null;
+
+        StopTimer();
+        _player.Dispose();
+
+        GC.SuppressFinalize(this);
     }
 }

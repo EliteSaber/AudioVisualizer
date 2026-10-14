@@ -44,4 +44,78 @@ public sealed record SpectrumSettings
     public IReadOnlyList<EqualizerBand> Equalizer { get; init; } = DefaultEqualizer;
 
     public static SpectrumSettings Default { get; } = new();
+
+    /// <summary>
+    /// Равенство по значению, а не по ссылке: список полос эквалайзера каждый раз новый,
+    /// и без этого настройки, отличающиеся только содержимым списка, считались бы разными.
+    /// </summary>
+    public bool Equals(SpectrumSettings? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return FftSize == other.FftSize
+            && AnalysisBandCount == other.AnalysisBandCount
+            && MinFrequencyHz.Equals(other.MinFrequencyHz)
+            && MaxFrequencyHz.Equals(other.MaxFrequencyHz)
+            && MinDecibels.Equals(other.MinDecibels)
+            && MaxDecibels.Equals(other.MaxDecibels)
+            && GainDb.Equals(other.GainDb)
+            && Gamma.Equals(other.Gamma)
+            && Attack.Equals(other.Attack)
+            && Release.Equals(other.Release)
+            && BandsAreEqual(Equalizer, other.Equalizer);
+    }
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(FftSize);
+        hash.Add(AnalysisBandCount);
+        hash.Add(MinFrequencyHz);
+        hash.Add(MaxFrequencyHz);
+        hash.Add(MinDecibels);
+        hash.Add(MaxDecibels);
+        hash.Add(GainDb);
+        hash.Add(Gamma);
+        hash.Add(Attack);
+        hash.Add(Release);
+
+        foreach (var band in Equalizer)
+        {
+            hash.Add(band);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    private static bool BandsAreEqual(IReadOnlyList<EqualizerBand>? left, IReadOnlyList<EqualizerBand>? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (left[i] != right[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

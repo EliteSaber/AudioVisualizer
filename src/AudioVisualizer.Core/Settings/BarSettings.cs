@@ -1,0 +1,30 @@
+namespace AudioVisualizer.Core.Settings;
+
+/// <summary>Форма столбиков. Число столбиков выводится из ширины и промежутка, а не хранится.</summary>
+public sealed record BarSettings
+{
+    /// <summary>Ширина столбика в пикселях кадра.</summary>
+    public int Width { get; init; } = 8;
+
+    /// <summary>Промежуток между соседними столбиками.</summary>
+    public int Spacing { get; init; } = 4;
+
+    /// <summary>Радиус скругления углов в пикселях.</summary>
+    public int CornerRadius { get; init; } = 4;
+
+    public CornerStyle CornerStyle { get; init; } = CornerStyle.OuterRounded;
+
+    /// <summary>Толщина границы столбика в пикселях.</summary>
+    public double BorderWidth { get; init; } = 1d;
+
+    public BarFillMode FillMode { get; init; } = BarFillMode.VerticalGradient;
+
+    /// <summary>Отступ от края кадра до первого столбика.</summary>
+    public int Margin { get; init; } = 48;
+
+    /// <summary>Зазор между центральной линией и краями столбиков.</summary>
+    public int CenterGap { get; init; } = 4;
+
+    /// <summary>Рисовать нижнюю половину. По умолчанию столбики зеркальны.</summary>
+    public bool Mirror { get; init; } = true;
+}

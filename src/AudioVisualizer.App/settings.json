@@ -1,0 +1,53 @@
+{
+  "Colors": {
+    "Background": "#121218FF",
+    "BarFill": "#3884FFFF",
+    "BarFillSecondary": "#FF60A8FF",
+    "BarBorder": "#00000000",
+    "CenterLine": "#FFFFFF40"
+  },
+  "Bars": {
+    "Width": 8,
+    "Spacing": 4,
+    "CornerRadius": 4,
+    "CornerStyle": "OuterRounded",
+    "BorderWidth": 1.0,
+    "FillMode": "VerticalGradient",
+    "Margin": 48,
+    "CenterGap": 4,
+    "Mirror": true
+  },
+  "Spectrum": {
+    "FftSize": 4096,
+    "AnalysisBandCount": 256,
+    "MinFrequencyHz": 30.0,
+    "MaxFrequencyHz": 16000.0,
+    "MinDecibels": -70.0,
+    "MaxDecibels": -10.0,
+    "GainDb": 0.0,
+    "Gamma": 1.0,
+    "Attack": 0.6,
+    "Release": 0.2,
+    "Equalizer": [
+      { "CenterFrequencyHz": 31.5, "GainDb": 0.0 },
+      { "CenterFrequencyHz": 63.0, "GainDb": 0.0 },
+      { "CenterFrequencyHz": 125.0, "GainDb": 0.0 },
+      { "CenterFrequencyHz": 250.0, "GainDb": 0.0 },
+      { "CenterFrequencyHz": 500.0, "GainDb": 0.0 },
+      { "CenterFrequencyHz": 1000.0, "GainDb": 0.0 },
+      { "CenterFrequencyHz": 2000.0, "GainDb": 0.0 },
+      { "CenterFrequencyHz": 4000.0, "GainDb": 0.0 },
+      { "CenterFrequencyHz": 8000.0, "GainDb": 0.0 },
+      { "CenterFrequencyHz": 16000.0, "GainDb": 0.0 }
+    ]
+  },
+  "Export": {
+    "Width": 1920,
+    "Height": 1080,
+    "FramesPerSecond": 60,
+    "Crf": 18,
+    "CodecPreset": "medium",
+    "AudioBitrateKbps": 192,
+    "FfmpegPath": null
+  }
+}

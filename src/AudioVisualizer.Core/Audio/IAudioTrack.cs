@@ -1,0 +1,20 @@
+using NAudio.Wave;
+
+namespace AudioVisualizer.Core.Audio;
+
+/// <summary>
+/// Открытый аудиотрек. Наследуется от <see cref="IWaveProvider"/>, потому что так устроен
+/// <c>AudioFileReader</c> и адаптер поверх него остаётся тонким.
+/// </summary>
+/// <remarks>
+/// Интерфейс нужен, чтобы состояние плеера проверялось тестами: настоящий вывод требует
+/// звуковой карты, а на нём держатся перемотка, пауза и возобновление с места паузы.
+/// </remarks>
+public interface IAudioTrack : IWaveProvider, IDisposable
+{
+    TimeSpan Position { get; set; }
+
+    TimeSpan Duration { get; }
+
+    float Volume { get; set; }
+}

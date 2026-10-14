@@ -16,6 +16,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -48,11 +49,6 @@
                            Foreground="{StaticResource TextBrush}"
                            ToolTip="{Binding FileTitle}"
                            Text="{Binding FileTitle}" />
-
-                <TextBlock Margin="14,0,0,0"
-                           VerticalAlignment="Center"
-                           Foreground="{StaticResource MutedTextBrush}"
-                           Text="{Binding Duration, StringFormat={}длительность {0:hh\\:mm\\:ss}}" />
             </StackPanel>
 
             <StackPanel Grid.Column="2" Margin="24,0,0,0" Orientation="Horizontal">
@@ -68,8 +64,82 @@
             </StackPanel>
         </Grid>
 
+        <!-- Панель воспроизведения -->
+        <Grid Grid.Row="1" Margin="12,0,12,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Width="44"
+                    Padding="0,4"
+                    FontSize="14"
+                    IsEnabled="{Binding HasTrack}"
+                    Command="{Binding TogglePlayCommand}">
+                <!-- Символ и подсказка заданы в стиле: локальные значения перебили бы триггер. -->
+                <Button.Style>
+                    <Style TargetType="{x:Type Button}">
+                        <Setter Property="Content" Value="▶" />
+                        <Setter Property="ToolTip" Value="Воспроизвести" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                <Setter Property="Content" Value="⏸" />
+                                <Setter Property="ToolTip" Value="Пауза" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <Button Grid.Column="1"
+                    Width="44"
+                    Margin="6,0,0,0"
+                    Padding="0,4"
+                    FontSize="14"
+                    IsEnabled="{Binding HasTrack}"
+                    Command="{Binding StopPlaybackCommand}"
+                    Content="⏹"
+                    ToolTip="Остановить и вернуть в начало" />
+
+<!--
+                Значение ползунка намеренно не привязано к модели представления.
+
+                Привязка Value у элемента, которым манипулирует пользователь, всегда
+                конфликтует: ползунок меняет значение локально, а источник подталкивает своё.
+                При воспроизведении источник обновляется каждые 16 мс, и между нажатием и
+                отпусканием значение успевает затереться старой позицией - перемотка
+                не доходит до модели. Поэтому окно выставляет значение само, подписываясь
+                на PositionChanged, и молчит, пока пользователь тянет бегунок.
+
+                Начало перемотки ловится в коде-бэкенде по изменению значения, а не
+                событием нажатия: нажатие до ползунка не доходит, а значение меняется
+                всегда, когда им пользуется человек. Отпускание - туннельное событие,
+                обычные MouseLeftButtonUp классовые обработчики Slider и Thumb
+                помечают обработанными раньше наших.
+
+                IsMoveToPointEnabled переносит бегунок по клику на дорожке.
+            -->
+            <Slider x:Name="PositionSlider"
+                    Grid.Column="2"
+                    Margin="14,0,14,0"
+                    IsEnabled="{Binding HasTrack}"
+                    IsMoveToPointEnabled="True"
+                    Maximum="{Binding Duration.TotalSeconds}"
+                    PreviewMouseLeftButtonUp="OnScrubMouseUp" />
+
+            <TextBlock Grid.Column="3"
+                       MinWidth="96"
+                       VerticalAlignment="Center"
+                       TextAlignment="Right"
+                       FontFamily="Consolas"
+                       Foreground="{StaticResource MutedTextBrush}"
+                       Text="{Binding TimeLabel}" />
+        </Grid>
+
         <!-- Превью и настройки -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -266,7 +336,7 @@
         </Grid>
 
         <!-- Статус -->
-        <Grid Grid.Row="2" Margin="12,0,12,10">
+        <Grid Grid.Row="3" Margin="12,0,12,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="180" />

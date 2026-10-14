@@ -1,9 +1,227 @@
 ﻿<Application x:Class="AudioVisualizer.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:AudioVisualizer.App"
+             xmlns:controls="clr-namespace:AudioVisualizer.App.Controls"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+
+        <!--
+            Тёмная панель настроек: цвета заданы здесь, а не в каждом элементе. Фон кадра
+            визуализации берётся из настроек и к панели отношения не имеет.
+        -->
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
+        <!--
+            Шаблон подписи элемента списка. DisplayMemberPath полагается на ленивую генерацию
+            шаблона, и в собственном шаблоне ComboBox она до закрытого значения не доезжает:
+            список показывал ToString записи. Явный ItemTemplate попадает в SelectionBoxItemTemplate
+            напрямую, поэтому подписи видны и в списке, и в закрытом виде.
+        -->
+        <DataTemplate x:Key="ChoiceTemplate">
+            <TextBlock Text="{Binding Title}" />
+        </DataTemplate>
+
+        <SolidColorBrush x:Key="PanelBackground" Color="#FF2B2B31" />
+        <SolidColorBrush x:Key="PanelBorder" Color="#FF45454D" />
+        <SolidColorBrush x:Key="TextBrush" Color="#FFE2E2E6" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#FF9A9AA4" />
+        <SolidColorBrush x:Key="ControlBackground" Color="#FF3A3A42" />
+        <SolidColorBrush x:Key="SelectionBackground" Color="#FF2F6FD0" />
+        <SolidColorBrush x:Key="SelectionText" Color="#FFFFFFFF" />
+
+        <Style TargetType="{x:Type controls:SettingRow}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type controls:SettingRow}">
+                        <Grid Margin="0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="170" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center"
+                                       Margin="0,0,10,0"
+                                       Foreground="{StaticResource TextBrush}"
+                                       Text="{TemplateBinding Label}" />
+                            <ContentPresenter Grid.Column="1" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type TextBlock}" x:Key="SectionHeader">
+            <Setter Property="Margin" Value="0,4,0,8" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+        </Style>
+
+        <Style TargetType="{x:Type Slider}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="IsSnapToTickEnabled" Value="True" />
+        </Style>
+
+        <Style TargetType="{x:Type TextBox}">
+            <Setter Property="Background" Value="{StaticResource ControlBackground}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="CaretBrush" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}" />
+            <Setter Property="Padding" Value="4,3" />
+        </Style>
+
+        <!--
+            Собственные шаблоны вместо сеттеров. Тема Aero2 красит фон прямо на внутреннем
+            Border шаблона, и её триггер сильнее сеттера на самом элементе: состояния
+            наведения и выбора рисовались системными цветами. Здесь фон рисует наш Border,
+            поэтому все три состояния под нашим контролем.
+
+            Порядок триггеров: сначала наведение, затем выбранное - при совпадении обоих
+            выигрывает последний.
+        -->
+        <Style TargetType="{x:Type ComboBox}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBox}">
+                        <Grid>
+
+                            <!--
+                                Видимая часть: значение и стрелка. ContentPresenter держим
+                                в шаблоне ComboBox, а не в шаблоне ToggleButton: TemplateBinding
+                                смотрит только в ближайший templated parent, и внутри вложенного
+                                шаблона он искал бы свойство у кнопки, а не у списка.
+                            -->
+                            <Border x:Name="ToggleRoot"
+                                    Padding="6,3"
+                                    Background="{StaticResource ControlBackground}"
+                                    BorderBrush="{StaticResource PanelBorder}"
+                                    BorderThickness="1"
+                                    TextElement.Foreground="{TemplateBinding Foreground}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ContentPresenter Grid.Column="0"
+                                                      Margin="2,0,4,0"
+                                                      VerticalAlignment="Center"
+                                                      IsHitTestVisible="False"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}" />
+                                    <TextBlock Grid.Column="1"
+                                               Margin="0,0,2,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextBrush}"
+                                               Text="▾" />
+                                </Grid>
+                            </Border>
+
+                            <!-- Прозрачный слой поверх рамки: он ловит клик и открывает список. -->
+                            <ToggleButton x:Name="Toggle"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          Background="Transparent"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <!--
+                                    Свой пустой шаблон обязателен: без него применяется тема, и она
+                                    красит поверх прозрачного слоя свою рамку с голубой подсветкой
+                                    наведения - ровно то, что нужно убрать.
+                                -->
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                                        <Border Background="Transparent" />
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <!-- PART_Popup: базовый класс ComboBox ищет попап по этому имени. -->
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   Placement="Bottom"
+                                   PopupAnimation="Fade"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}">
+                                <Border MinWidth="{TemplateBinding ActualWidth}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                        Margin="0,2,0,0"
+                                        Background="{StaticResource ControlBackground}"
+                                        BorderBrush="{StaticResource PanelBorder}"
+                                        BorderThickness="1">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ToggleRoot" Property="BorderBrush" Value="#FF7A7A88" />
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter TargetName="ToggleRoot" Property="BorderBrush" Value="#FF7A7A88" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type ComboBoxItem}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBoxItem}">
+                        <Border x:Name="ItemRoot"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{StaticResource ControlBackground}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemRoot" Property="Background" Value="#FF4C4C57" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemRoot" Property="Background" Value="{StaticResource SelectionBackground}" />
+                                <Setter Property="Foreground" Value="{StaticResource SelectionText}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type TabItem}">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabItem}">
+                        <Border x:Name="TabRoot"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="3,3,0,0"
+                                Background="{StaticResource ControlBackground}"
+                                BorderBrush="{StaticResource PanelBorder}"
+                                BorderThickness="1"
+                                TextElement.Foreground="{TemplateBinding Foreground}">
+                            <ContentPresenter ContentSource="Header" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabRoot" Property="Background" Value="#FF44444E" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabRoot" Property="Background" Value="#FF585865" />
+                                <Setter TargetName="TabRoot" Property="BorderBrush" Value="#FF7A7A88" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
     </Application.Resources>
 </Application>

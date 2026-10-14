@@ -1,12 +1,285 @@
-﻿<Window x:Class="AudioVisualizer.App.MainWindow"
+<Window x:Class="AudioVisualizer.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:AudioVisualizer.App"
+        xmlns:controls="clr-namespace:AudioVisualizer.App.Controls"
+        xmlns:core="clr-namespace:AudioVisualizer.Core.Rendering;assembly=AudioVisualizer.Core"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="AudioVisualizer"
+        Width="1480"
+        Height="920"
+        MinWidth="1100"
+        MinHeight="680"
+        Background="#FF232329">
+
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Панель управления -->
+        <Grid Margin="12,10,12,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Width="140"
+                    Padding="10,6"
+                    Command="{Binding OpenFileCommand}"
+                    Content="Открыть файл" />
+
+            <!--
+                Имя файла и длительность живут в колонке на всю оставшуюся ширину: в DockPanel
+                элементы слева измеряются без ограничения, длинное имя выдавило бы кнопки вправо,
+                а TextTrimming при таком измерении не срабатывает.
+            -->
+            <StackPanel Grid.Column="1"
+                        Margin="14,0,0,0"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                <TextBlock MaxWidth="360"
+                           TextTrimming="CharacterEllipsis"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextBrush}"
+                           ToolTip="{Binding FileTitle}"
+                           Text="{Binding FileTitle}" />
+
+                <TextBlock Margin="14,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource MutedTextBrush}"
+                           Text="{Binding Duration, StringFormat={}длительность {0:hh\\:mm\\:ss}}" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Margin="24,0,0,0" Orientation="Horizontal">
+                <Button Width="160"
+                        Margin="0,0,8,0"
+                        Padding="10,6"
+                        Command="{Binding SaveSettingsCommand}"
+                        Content="Сохранить настройки" />
+                <Button Width="130"
+                        Padding="10,6"
+                        Command="{Binding ResetSettingsCommand}"
+                        Content="Сбросить" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Превью и настройки -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Border Margin="0,0,12,12"
+                    Background="#FF15151A"
+                    BorderBrush="#FF15151A"
+                    BorderThickness="1">
+                <Viewbox Stretch="Uniform">
+                    <Border Width="{Binding PreviewWidth}"
+                            Height="{Binding PreviewHeight}">
+                        <core:SpectrumElement Snapshot="{Binding Snapshot}" />
+                    </Border>
+                </Viewbox>
+            </Border>
+
+            <Border Grid.Column="1"
+                    Width="330"
+                    Margin="0,0,12,12"
+                    Background="{StaticResource PanelBackground}"
+                    BorderBrush="{StaticResource PanelBorder}"
+                    BorderThickness="1">
+                <TabControl Margin="8"
+                            Background="{StaticResource PanelBackground}"
+                            BorderThickness="0">
+
+                    <!-- Цвета -->
+                    <TabItem Header="Цвета">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,8,0,0">
+                            <StackPanel>
+                                <controls:SettingRow Label="Цвет фона">
+                                    <controls:ColorPicker Color="{Binding Settings.BackgroundColor, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="Столбик у центра">
+                                    <controls:ColorPicker Color="{Binding Settings.BarFillColor, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="Столбик у края">
+                                    <controls:ColorPicker Color="{Binding Settings.BarSecondaryColor, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="Граница столбика">
+                                    <controls:ColorPicker Color="{Binding Settings.BarBorderColor, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="Центральная линия">
+                                    <controls:ColorPicker Color="{Binding Settings.CenterLineColor, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Столбики -->
+                    <TabItem Header="Столбики">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,8,0,0">
+                            <StackPanel>
+                                <controls:SettingRow Label="{Binding Settings.BarWidth, StringFormat={}Ширина: {0} px}">
+                                    <Slider Minimum="1" Maximum="80" Value="{Binding Settings.BarWidth, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.BarSpacing, StringFormat={}Промежуток: {0} px}">
+                                    <Slider Minimum="0" Maximum="40" Value="{Binding Settings.BarSpacing, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.BarCornerRadius, StringFormat={}Скругление: {0} px}">
+                                    <Slider Minimum="0" Maximum="40" Value="{Binding Settings.BarCornerRadius, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="Форма углов">
+                                    <ComboBox ItemsSource="{Binding Settings.CornerStyleChoices}"
+                                              ItemTemplate="{StaticResource ChoiceTemplate}"
+                                              SelectedValuePath="Value"
+                                              SelectedValue="{Binding Settings.BarCornerStyle, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.BarBorderThickness, StringFormat={}Граница: {0:0.#} px}">
+                                    <Slider Minimum="0" Maximum="10" Value="{Binding Settings.BarBorderThickness, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="Заливка">
+                                    <ComboBox ItemsSource="{Binding Settings.FillModeChoices}"
+                                              ItemTemplate="{StaticResource ChoiceTemplate}"
+                                              SelectedValuePath="Value"
+                                              SelectedValue="{Binding Settings.BarFillMode, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.BarMargin, StringFormat={}Отступ от края: {0} px}">
+                                    <Slider Minimum="0" Maximum="400" Value="{Binding Settings.BarMargin, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.BarCenterGap, StringFormat={}Зазор у центра: {0} px}">
+                                    <Slider Minimum="0" Maximum="120" Value="{Binding Settings.BarCenterGap, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="Зеркалить вниз">
+                                    <CheckBox IsChecked="{Binding Settings.BarMirror, Mode=TwoWay}"
+                                              Foreground="{StaticResource TextBrush}"
+                                              VerticalAlignment="Bottom"
+                                              ToolTip="Столбики расходятся от центра вверх и вниз" />
+                                </controls:SettingRow>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Спектр и эквалайзер -->
+                    <TabItem Header="Спектр и EQ">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,8,0,0">
+                            <StackPanel>
+                                <controls:SettingRow Label="{Binding Settings.MinFrequencyHz, StringFormat={}От: {0:0} Гц}">
+                                    <Slider Minimum="20" Maximum="1000" Value="{Binding Settings.MinFrequencyHz, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.MaxFrequencyHz, StringFormat={}До: {0} Гц}">
+                                    <Slider Minimum="2000" Maximum="22050" Value="{Binding Settings.MaxFrequencyHz, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.MinDecibels, StringFormat={}Порог: {0:0} дБ}">
+                                    <Slider Minimum="-120" Maximum="0" Value="{Binding Settings.MinDecibels, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.MaxDecibels, StringFormat={}Потолок: {0:0} дБ}">
+                                    <Slider Minimum="-60" Maximum="20" Value="{Binding Settings.MaxDecibels, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.GainDb, StringFormat={}Усиление: {0:0} дБ}">
+                                    <Slider Minimum="-30" Maximum="30" Value="{Binding Settings.GainDb, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.Gamma, StringFormat={}Кривизна: {0:0.00}}">
+                                    <Slider Minimum="0.2" Maximum="3" TickFrequency="0.05" Value="{Binding Settings.Gamma, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.Attack, StringFormat={}Атака: {0:0.00}}">
+                                    <Slider Minimum="0.05" Maximum="1" TickFrequency="0.05" Value="{Binding Settings.Attack, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.Release, StringFormat={}Спад: {0:0.00}}">
+                                    <Slider Minimum="0.02" Maximum="1" TickFrequency="0.02" Value="{Binding Settings.Release, Mode=TwoWay}" />
+                                </controls:SettingRow>
+
+                                <TextBlock Text="Визуальный эквалайзер" Style="{StaticResource SectionHeader}" />
+                                <ItemsControl ItemsSource="{Binding Settings.Equalizer}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,3">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="72" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="52" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Foreground="{StaticResource TextBrush}"
+                                                           Text="{Binding Title}" />
+                                                <Slider Grid.Column="1"
+                                                        Minimum="-12"
+                                                        Maximum="12"
+                                                        Value="{Binding GainDb, Mode=TwoWay}" />
+                                                <TextBlock Grid.Column="2"
+                                                           Margin="6,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Text="{Binding GainDb, StringFormat={}{0:0.0} дБ}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Экспорт -->
+                    <TabItem Header="Экспорт">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,8,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Видео выгружается в mp4 (H.264 + AAC)." Style="{StaticResource SectionHeader}" />
+                                <controls:SettingRow Label="{Binding Settings.ExportWidth, StringFormat={}Ширина: {0} px}">
+                                    <Slider Minimum="320" Maximum="3840" Value="{Binding Settings.ExportWidth, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.ExportHeight, StringFormat={}Высота: {0} px}">
+                                    <Slider Minimum="240" Maximum="2160" Value="{Binding Settings.ExportHeight, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.ExportFramesPerSecond, StringFormat={}Кадров в секунду: {0}}">
+                                    <Slider Minimum="1" Maximum="120" Value="{Binding Settings.ExportFramesPerSecond, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="Пресет размера">
+                                    <ComboBox ItemsSource="{Binding Settings.SizePresets}"
+                                              ItemTemplate="{StaticResource ChoiceTemplate}"
+                                              SelectedItem="{Binding Settings.SelectedSizePreset, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.Crf, StringFormat={}Качество CRF {0}}">
+                                    <Slider Minimum="0" Maximum="40" Value="{Binding Settings.Crf, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="Пресет кодека">
+                                    <ComboBox ItemsSource="{Binding Settings.CodecPresets}"
+                                              SelectedItem="{Binding Settings.CodecPreset, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <controls:SettingRow Label="{Binding Settings.AudioBitrateKbps, StringFormat={}Звук: {0} кбит/с}">
+                                    <Slider Minimum="64" Maximum="320" Value="{Binding Settings.AudioBitrateKbps, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <TextBlock Text="ffmpeg" Style="{StaticResource SectionHeader}" />
+                                <TextBlock Margin="0,0,0,4"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Путь к ffmpeg.exe. Пусто - искать в PATH." />
+                                <TextBox Text="{Binding Settings.FfmpegPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                </TabControl>
+            </Border>
+        </Grid>
+
+        <!-- Статус -->
+        <Grid Grid.Row="2" Margin="12,0,12,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="180" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{StaticResource MutedTextBrush}"
+                       Text="{Binding Status}" />
+            <ProgressBar Grid.Column="1"
+                         Height="4"
+                         IsIndeterminate="True"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+        </Grid>
 
     </Grid>
 </Window>

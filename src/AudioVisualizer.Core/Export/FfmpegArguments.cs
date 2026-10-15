@@ -44,6 +44,14 @@ public static class FfmpegArguments
         var crf = Math.Clamp(settings.Crf, 0, 51);
         var bitrate = Math.Clamp(settings.AudioBitrateKbps, 32, 320);
 
+        var coder = settings.AacCoder?.Trim().ToLowerInvariant();
+        if (coder is null || !ExportSettings.AacCoders.Contains(coder, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"Неизвестный кодировщик звука \"{settings.AacCoder}\". Ожидается один из: {string.Join(", ", ExportSettings.AacCoders)}.",
+                nameof(settings));
+        }
+
         return
         [
             "-y",
@@ -72,6 +80,14 @@ public static class FfmpegArguments
             "-pix_fmt", "yuv420p",
 
             "-c:a", "aac",
+
+            // Кодировщик задаётся явно, хотя nmr и есть значение по умолчанию. Причина в том,
+            // что выбор по умолчанию упирается в ffmpeg, а не в нас: с ним выгрузку приходится
+            // прерывать. Явное значение делает команду одинаковой при любом значении по умолчанию
+            // в чужой сборке. nmr стоит первым и лучше по качеству, twoloop и fast проверены
+            // на треке, где nmr зависает; насколько надёжен каждый из них на других треках,
+            // не проверено, поэтому список оставлен без своих пометок.
+            "-aac_coder", coder,
             "-b:a", string.Create(CultureInfo.InvariantCulture, $"{bitrate}k"),
             "-movflags", "+faststart",
 

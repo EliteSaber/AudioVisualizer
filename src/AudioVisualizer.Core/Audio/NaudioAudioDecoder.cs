@@ -39,7 +39,9 @@ internal static class NaudioAudioDecoder
                     sum += buffer[(frame * channels) + channel];
                 }
 
-                samples[offset++] = sum / channels;
+                // Нечисловой сэмпл декодера иначе испортил бы весь кадр: сумма с таким значением
+                // остаётся нечисловой и уезжает в столбики спектра и в WAV для ffmpeg.
+                samples[offset++] = AudioData.Finite(sum / channels);
             }
         }
 

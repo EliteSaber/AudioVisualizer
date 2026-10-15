@@ -121,6 +121,48 @@ public class FfmpegArgumentsTests
         Assert.Throws<ArgumentException>(() => FfmpegArguments.Build(Settings, "аудио.wav", " "));
     }
 
+    [Theory]
+    [InlineData("nmr")]
+    [InlineData("twoloop")]
+    [InlineData("fast")]
+    public void Build_КодировщикЗвукаСтоитРядомСAac(string coder)
+    {
+        // Кодировщик задаётся явно: nmr и есть значение ffmpeg по умолчанию, но на части
+        // сигналов он зависает, и выбирать его должен пользователь, а не сборка ffmpeg.
+        var arguments = FfmpegArguments.Build(Settings with { AacCoder = coder }, "аудио.wav", "итог.mp4").ToArray();
+        var index = Array.IndexOf(arguments, "-aac_coder");
+
+        Assert.True(index > 0, "в команде нет -aac_coder");
+        Assert.Equal("aac", arguments[index - 1]);
+        Assert.Equal(coder, arguments[index + 1]);
+    }
+
+    [Fact]
+    public void Build_КодировщикЗвукаПриводитсяКНижнемуРегистру()
+    {
+        var arguments = FfmpegArguments.Build(Settings with { AacCoder = " TwoLoop " }, "аудио.wav", "итог.mp4").ToArray();
+
+        Assert.Contains("twoloop", arguments);
+    }
+
+    [Fact]
+    public void НеизвестныйКодировщикЗвука_Отклоняется()
+    {
+        var settings = Settings with { AacCoder = "lpc" };
+
+        var exception = Assert.Throws<ArgumentException>(
+            () => FfmpegArguments.Build(settings, "аудио.wav", "итог.mp4"));
+
+        Assert.Contains("lpc", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ПустойКодировщикЗвука_Отклоняется()
+    {
+        Assert.Throws<ArgumentException>(
+            () => FfmpegArguments.Build(Settings with { AacCoder = " " }, "аудио.wav", "итог.mp4"));
+    }
+
     [Fact]
     public void Build_ЧислаНеЗависятОтЯзыка()
     {

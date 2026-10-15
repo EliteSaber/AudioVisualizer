@@ -101,6 +101,95 @@ public class ExportTests
     }
 
     [Fact]
+    public async Task ОшибкаВыгрузки_ПоднимаетУведомлениеДляОкна()
+    {
+        var (viewModel, exporter, directory, _) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedSine.Path);
+
+            var notices = new List<Notice>();
+            viewModel.NoticeRequested = notices.Add;
+
+            exporter.Failure = new VideoExportException("ffmpeg перестал читать кадры");
+
+            await viewModel.ExportVideoAsync(Path.Combine(directory.Root, "итог.mp4"));
+
+            // Заголовок по смыслу и текст с подробностями. Папки у ошибки нет: ролик не
+            // появился, а журнала на диске больше не остаётся.
+            var notice = Assert.Single(notices);
+            Assert.Equal("Не удалось выгрузить видео", notice.Title);
+            Assert.Equal("ffmpeg перестал читать кадры", notice.Message);
+            Assert.Null(notice.FolderPath);
+        }
+    }
+
+    [Fact]
+    public async Task УспешнаяВыгрузка_ПоднимаетУведомление()
+    {
+        var (viewModel, _, directory, _) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedSine.Path);
+
+            var notices = new List<Notice>();
+            viewModel.NoticeRequested = notices.Add;
+
+            await viewModel.ExportVideoAsync(Path.Combine(directory.Root, "итог.mp4"));
+
+            var notice = Assert.Single(notices);
+            Assert.Equal("Выгрузка готова", notice.Title);
+            Assert.Contains("кадров", notice.Message, StringComparison.Ordinal);
+
+            // Полный путь нужен в окне: в строке статуса остаётся имя, а пользователю
+            // после выгрузки нужен именно он.
+            Assert.Contains(Path.Combine(directory.Root, "итог.mp4"), notice.Message, StringComparison.Ordinal);
+            Assert.Equal(directory.Root, notice.FolderPath);
+        }
+    }
+
+    [Fact]
+    public async Task ТихаяВыгрузка_ОбУспехеОкнаНеПоказывает()
+    {
+        var (viewModel, _, directory, _) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedSine.Path);
+
+            var notices = new List<Notice>();
+            viewModel.NoticeRequested = notices.Add;
+            viewModel.Settings.QuietExport = true;
+
+            await viewModel.ExportVideoAsync(Path.Combine(directory.Root, "итог.mp4"));
+
+            // Галочка про успех: строка статуса на месте, а лишнего окна нет.
+            Assert.Empty(notices);
+            Assert.Contains("Готово", viewModel.Status, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task ТихаяВыгрузка_ОбОшибкеОкноПоказывает()
+    {
+        var (viewModel, exporter, directory, _) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedSine.Path);
+
+            var notices = new List<Notice>();
+            viewModel.NoticeRequested = notices.Add;
+            viewModel.Settings.QuietExport = true;
+
+            exporter.Failure = new VideoExportException("ffmpeg перестал читать кадры");
+
+            await viewModel.ExportVideoAsync(Path.Combine(directory.Root, "итог.mp4"));
+
+            // Ошибку пропускать нельзя: галочка обещает только обратное.
+            Assert.Equal("Не удалось выгрузить видео", Assert.Single(notices).Title);
+        }
+    }
+
+    [Fact]
     public async Task Отмена_ОстанавливаетВыгрузку()
     {
         var (viewModel, exporter, directory, _) = Create();

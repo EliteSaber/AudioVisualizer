@@ -33,4 +33,13 @@
     </None>
   </ItemGroup>
 
+  <!--
+    Именованные элементы разметки компилируются во внутренние поля, и без этой строки тесты
+    окна не видели бы их содержимого. Публичным API ради проверки сделано не всё приложение,
+    а ровно то, что и так internal.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="AudioVisualizer.Tests" />
+  </ItemGroup>
+
 </Project>

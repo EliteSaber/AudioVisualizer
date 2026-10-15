@@ -153,6 +153,42 @@
             </Style.Triggers>
         </Style>
 
+        <!--
+            Кнопка с текстом для диалогов. Отдельный шаблон нужен не из-за рисунка: у иконочной
+            кнопки жёстко заданы 32x30 и нулевой отступ, и текст в ней обрежется. Системная тема
+            красит кнопку сама, поэтому свой шаблон обязателен в любом случае - иначе диалог
+            окажется серой кнопкой Aero2 посреди тёмной панели.
+        -->
+        <ControlTemplate x:Key="DialogButtonTemplate" TargetType="{x:Type Button}">
+            <Border x:Name="Surface"
+                    Padding="{TemplateBinding Padding}"
+                    Background="{StaticResource ControlBackground}"
+                    BorderBrush="{StaticResource PanelBorder}"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    SnapsToDevicePixels="True">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource HoverBorderBrush}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter TargetName="Surface" Property="Opacity" Value="0.7" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.35" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style x:Key="DialogButton" TargetType="{x:Type Button}">
+            <Setter Property="MinWidth" Value="104" />
+            <Setter Property="Padding" Value="14,6" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Template" Value="{StaticResource DialogButtonTemplate}" />
+        </Style>
+
         <Style TargetType="{x:Type controls:SettingRow}">
             <Setter Property="Template">
                 <Setter.Value>

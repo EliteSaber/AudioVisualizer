@@ -199,6 +199,26 @@ public class SettingsNormalizerTests
     }
 
     [Fact]
+    public void Normalize_КодировщикЗвука_ПриводитсяКИзвестному()
+    {
+        Assert.Equal("twoloop", SettingsNormalizer.NormalizeExport(new ExportSettings { AacCoder = " TwoLoop " }).AacCoder);
+        Assert.Equal("nmr", SettingsNormalizer.NormalizeExport(new ExportSettings { AacCoder = "lpc" }).AacCoder);
+        Assert.Equal("nmr", SettingsNormalizer.NormalizeExport(new ExportSettings { AacCoder = null! }).AacCoder);
+    }
+
+    [Theory]
+    [InlineData("nmr")]
+    [InlineData("twoloop")]
+    [InlineData("fast")]
+    public void Normalize_КодировщикЗвука_КаждыйИзСпискаПроходит(string coder)
+    {
+        // Список один на настройки, команду и панель, и он не должен обрезаться по дороге:
+        // значение из настроек обязано дойти до команды ffmpeg без замены.
+        Assert.Contains(coder, ExportSettings.AacCoders);
+        Assert.Equal(coder, SettingsNormalizer.NormalizeExport(new ExportSettings { AacCoder = coder }).AacCoder);
+    }
+
+    [Fact]
     public void Normalize_ПутьКFfmpeg_ПустоеЗначениеСтановитсяNull()
     {
         Assert.Null(SettingsNormalizer.NormalizeExport(new ExportSettings { FfmpegPath = "   " }).FfmpegPath);

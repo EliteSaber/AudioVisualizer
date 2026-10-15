@@ -101,6 +101,26 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task ОшибкаОткрытияФайла_ПоднимаетОтчётДляОкна()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            var reports = new List<Notice>();
+            viewModel.NoticeRequested = reports.Add;
+
+            await viewModel.LoadFileAsync(@"Z:\нет\такого.mp3");
+
+            // Ошибка открытия не про ffmpeg, поэтому папки нет и кнопка «открыть папку»
+            // у окна показываться не должна.
+            var notice = Assert.Single(reports);
+            Assert.Equal("Не удалось открыть файл", notice.Title);
+            Assert.Contains("такого.mp3", notice.Message, StringComparison.Ordinal);
+            Assert.Null(notice.FolderPath);
+        }
+    }
+
+    [Fact]
     public async Task ИзменениеНастроек_ПересчитываетКадр()
     {
         var (viewModel, directory) = CreateViewModel();

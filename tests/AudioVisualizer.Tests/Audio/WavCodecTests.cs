@@ -43,6 +43,70 @@ public class WavCodecTests
     }
 
     [Fact]
+    public void WritePcm16_НечисловыеСэмплыСтановятсяТихой()
+    {
+        // Math.Clamp на NaN пропускает значение насквозь, а (short)float.NaN в C# не
+        // определено и даёт скачок полной громкости вместо тишины.
+        using var stream = new MemoryStream();
+        WavCodec.WritePcm16(stream, [float.NaN, float.PositiveInfinity, float.NegativeInfinity], 44100);
+
+        stream.Position = 0;
+        var result = WavCodec.Read(stream);
+
+        Assert.All(result.Samples, sample => Assert.InRange(sample, -0.0001f, 0.0001f));
+    }
+
+    [Fact]
+    public void Read_НечисловыеСэмплыFloat32СтановятсяТихой()
+    {
+        // float-WAV от ffmpeg может содержать NaN, и сумма каналов с таким значением
+        // испортила бы весь кадр вместе с соседями.
+        var payload = new byte[16];
+        BitConverter.GetBytes(float.NaN).CopyTo(payload, 0);
+        BitConverter.GetBytes(0.5f).CopyTo(payload, 8);
+
+        var content = RawWav.Build(format: 3, channels: 2, sampleRate: 44100, bitsPerSample: 32, payload);
+        using var stream = new MemoryStream(content);
+
+        var result = WavCodec.Read(stream);
+
+        Assert.InRange(result.Samples[0], -0.0001f, 0.0001f);
+    }
+
+    [Fact]
+    public void WritePcm16_РазмерВЗаголовкеСовпадаетСДанными()
+    {
+        // Разъявшаяся длина в заголовке обманывает ffmpeg на каждой выгрузке: он читает
+        // ровно столько байт, сколько обещано, и ролик молча теряет конец трека.
+        var samples = new float[10_000];
+
+        using var stream = new MemoryStream();
+        WavCodec.WritePcm16(stream, samples, 44100);
+
+        var bytes = stream.ToArray();
+
+        Assert.Equal(44 + samples.Length * 2, bytes.Length);
+        Assert.Equal(bytes.Length - 8, BitConverter.ToInt32(bytes, 4));
+        Assert.Equal(samples.Length * 2, BitConverter.ToInt32(bytes, 40));
+    }
+
+    [Fact]
+    public void WritePcm16_РазмерВЗаголовкеСовпадаетСДаннымиПриНеполномБлоке()
+    {
+        // Блок записи на 4096 сэмплов: неполный хвост дописывается после цикла, и его
+        // длина тоже должна попасть в заголовок.
+        var samples = new float[4097];
+
+        using var stream = new MemoryStream();
+        WavCodec.WritePcm16(stream, samples, 44100);
+
+        var bytes = stream.ToArray();
+
+        Assert.Equal(44 + samples.Length * 2, bytes.Length);
+        Assert.Equal(samples.Length * 2, BitConverter.ToInt32(bytes, 40));
+    }
+
+    [Fact]
     public void WritePcm16_ОбрезаетЗначенияВнеДиапазона()
     {
         using var stream = new MemoryStream();

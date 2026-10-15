@@ -108,6 +108,7 @@ public partial class ThemeResourceTests
         {
             System.IO.Path.Combine(root, "App.xaml"),
             System.IO.Path.Combine(root, "MainWindow.xaml"),
+            System.IO.Path.Combine(root, "MessageWindow.xaml"),
             System.IO.Path.Combine(root, "Theme", "Icons.xaml"),
             System.IO.Path.Combine(root, "Controls", "ColorPicker.xaml")
         };

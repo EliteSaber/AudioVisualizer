@@ -104,6 +104,45 @@ public class SettingsViewModelTests
         Assert.Equal(18, viewModel.Crf);
         Assert.Equal("medium", viewModel.CodecPreset);
         Assert.Equal(192, viewModel.AudioBitrateKbps);
+        Assert.Equal("nmr", viewModel.AacCoder);
+    }
+
+    [Fact]
+    public void КодировщикЗвука_ДоезжаетВНастройкиИОбратно()
+    {
+        // Значение обязано дойти до команды ffmpeg: без него панель настраивает то,
+        // чего выгрузка не спрашивает.
+        var viewModel = Create();
+
+        viewModel.AacCoder = "twoloop";
+        Assert.Equal("twoloop", viewModel.ToAppSettings().Export.AacCoder);
+
+        viewModel.Apply(AppSettings.Default with { Export = new ExportSettings { AacCoder = "fast" } });
+        Assert.Equal("fast", viewModel.AacCoder);
+    }
+
+    [Fact]
+    public void КодировщикЗвука_ПоУмолчаниюИзНастроек()
+    {
+        var viewModel = Create();
+
+        Assert.Equal(ExportSettings.DefaultAacCoder, viewModel.AacCoder);
+        Assert.Equal(viewModel.AacCoder, viewModel.AacCoderChoices[0]);
+        Assert.Contains(viewModel.AacCoder, viewModel.AacCoderChoices);
+    }
+
+    [Fact]
+    public void ТихаяВыгрузка_ДоезжаетВНастройкиИОбратно()
+    {
+        var viewModel = Create();
+
+        // Галочка лежит в AppSettings, а не в ExportSettings: тот уезжает в пресеты ролика,
+        // а это свойство машины, и в пресете ему не место.
+        viewModel.QuietExport = true;
+        Assert.True(viewModel.ToAppSettings().QuietExport);
+
+        viewModel.Apply(AppSettings.Default);
+        Assert.False(viewModel.QuietExport);
     }
 
     [Fact]
@@ -133,6 +172,7 @@ public class SettingsViewModelTests
     [InlineData("Crf")]
     [InlineData("CodecPreset")]
     [InlineData("AudioBitrateKbps")]
+    [InlineData("AacCoder")]
     public void РучнаяПравкаПараметраРолика_СбрасываетПресет(string propertyName)
     {
         var viewModel = Create();
@@ -145,6 +185,7 @@ public class SettingsViewModelTests
                 "ExportFramesPerSecond" => 24,
                 "Crf" => 20,
                 "CodecPreset" => "fast",
+                "AacCoder" => "twoloop",
                 _ => 256
             });
 

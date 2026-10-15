@@ -39,14 +39,30 @@ public partial class MainWindow : Window
 
         PositionSlider.ValueChanged += OnPositionSliderValueChanged;
 
+        // Ошибка показывается окном: подробности про ffmpeg и команда запуска не помещаются в
+        // строку статуса, а она обрезает их многоточием. Пока окно закрывается, новые не
+        // показываются: OnClosed отменяет выгрузку, и освобождение источников может дать
+        // ошибку уже после этого - диалог в закрывающемся окне заблокировал бы выход.
+        viewModel.NoticeRequested = notice =>
+        {
+            if (!IsClosing)
+            {
+                MessageWindow.Show(this, notice);
+            }
+        };
+
         DataContext = viewModel;
         Closed += OnClosed;
     }
+
+    private bool IsClosing { get; set; }
 
     // Настройки сохраняются при выходе, а не на каждое движение ползунка: иначе файл
     // переписывался бы десятки раз в секунду. Выгрузка видео при этом отменяется.
     private void OnClosed(object? sender, EventArgs args)
     {
+        IsClosing = true;
+
         if (DataContext is MainViewModel viewModel)
         {
             viewModel.SaveSettingsCommand.Execute(null);

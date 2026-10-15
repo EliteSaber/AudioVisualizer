@@ -37,7 +37,13 @@ public sealed record VideoExportProgress(int FramesDone, int TotalFrames, TimeSp
 /// </param>
 public sealed record VideoExportResult(string Path, int Frames, TimeSpan Elapsed, bool Cancelled = false);
 
-/// <summary>Выгрузка не удалась: ffmpeg не найден, вернул ошибку или не смог записать файл.</summary>
+/// <summary>
+/// Выгрузка не удалась: ffmpeg не найден, вернул ошибку или не смог записать файл.
+/// </summary>
+/// <remarks>
+/// В сообщении лежит всё для разбора: слова ffmpeg и сама команда. Журнала на диске нет -
+/// он оставался в папке с роликами после каждой выгрузки, а из окна его не открыть.
+/// </remarks>
 public sealed class VideoExportException : Exception
 {
     public VideoExportException(string message)

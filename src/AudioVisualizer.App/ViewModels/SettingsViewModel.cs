@@ -125,6 +125,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private int _audioBitrateKbps;
     [ObservableProperty] private string _ffmpegPath = string.Empty;
 
+    /// <summary>
+    /// Кодировщик звука AAC. Имена оставлены как в ffmpeg и без своих пометок: проверено
+    /// лишь, что два других кодировщика не зависали на том треке, где зависает этот.
+    /// Подписывать список значило бы обещать больше, чем показали проверки.
+    /// </summary>
+    [ObservableProperty] private string _aacCoder = ExportSettings.DefaultAacCoder;
+
+    public IReadOnlyList<string> AacCoderChoices { get; } = ExportSettings.AacCoders;
+
+    /// <summary>Тихая выгрузка: галочка отключает окно об успехе, но не об ошибке.</summary>
+    [ObservableProperty] private bool _quietExport;
+
     public AppSettings ToAppSettings() => new()
     {
         Colors = new ColorSettings
@@ -170,8 +182,10 @@ CenterGap = BarCenterGap,
             Crf = Crf,
             CodecPreset = CodecPreset,
             AudioBitrateKbps = AudioBitrateKbps,
+            AacCoder = AacCoder,
             FfmpegPath = string.IsNullOrWhiteSpace(FfmpegPath) ? null : FfmpegPath
-        }
+        },
+        QuietExport = QuietExport
     };
 
     /// <summary>Загружает значения в панель и поднимает <see cref="Changed"/> один раз, а не на каждое поле.</summary>
@@ -218,7 +232,9 @@ BarCenterGap = settings.Bars.CenterGap;
             Crf = settings.Export.Crf;
             CodecPreset = settings.Export.CodecPreset;
             AudioBitrateKbps = settings.Export.AudioBitrateKbps;
+            AacCoder = settings.Export.AacCoder;
             FfmpegPath = settings.Export.FfmpegPath ?? string.Empty;
+            QuietExport = settings.QuietExport;
 
             ApplyEqualizer(spectrum.Equalizer);
         }
@@ -241,7 +257,8 @@ BarCenterGap = settings.Bars.CenterGap;
             or nameof(ExportFramesPerSecond)
             or nameof(Crf)
             or nameof(CodecPreset)
-            or nameof(AudioBitrateKbps))
+            or nameof(AudioBitrateKbps)
+            or nameof(AacCoder))
         {
             ResetExportPreset();
         }
@@ -385,6 +402,7 @@ BarCenterGap = settings.Bars.CenterGap;
             Crf = export.Crf;
             CodecPreset = export.CodecPreset;
             AudioBitrateKbps = export.AudioBitrateKbps;
+            AacCoder = export.AacCoder;
         }
         finally
         {

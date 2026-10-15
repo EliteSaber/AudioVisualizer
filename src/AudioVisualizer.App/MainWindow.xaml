@@ -451,8 +451,32 @@
                                 <controls:SettingRow Label="{Binding Settings.AudioBitrateKbps, StringFormat={}Звук: {0} кбит/с}">
                                     <Slider Minimum="64" Maximum="320" Value="{Binding Settings.AudioBitrateKbps, Mode=TwoWay}" />
                                 </controls:SettingRow>
+                                <controls:SettingRow Label="Кодировщик звука">
+                                    <ComboBox ItemsSource="{Binding Settings.AacCoderChoices}"
+                                              SelectedItem="{Binding Settings.AacCoder, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <TextBlock Margin="0,0,0,4"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="На одном из кодировщиков выгрузка может зависнуть. Если ffmpeg перестал читать кадры, попробуйте другой." />
+
+                                <!--
+                                    Подсказка задана на строке, а не на чекбоксе: ToolTipService
+                                    показывает подсказку предка, если у наведённого элемента
+                                    своей нет. Подпись в шаблоне SettingRow и сам чекбокс своей
+                                    не имеют, поэтому одного значения хватает на оба места, а
+                                    текст остаётся в одном.
+                                -->
+                                <controls:SettingRow Label="Тихая выгрузка"
+                                                    ToolTip="Не показывать окно об удачной выгрузке">
+                                    <CheckBox IsChecked="{Binding Settings.QuietExport, Mode=TwoWay}"
+                                              Foreground="{StaticResource TextBrush}"
+                                              VerticalAlignment="Bottom" />
+                                </controls:SettingRow>
+
                                 <TextBlock Text="ffmpeg" Style="{StaticResource SectionHeader}" />
                                 <TextBlock Margin="0,0,0,4"
+                                           TextWrapping="Wrap"
                                            Foreground="{StaticResource MutedTextBrush}"
                                            Text="Путь к ffmpeg.exe. Пусто - искать в PATH." />
                                 <TextBox Text="{Binding Settings.FfmpegPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />

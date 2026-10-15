@@ -24,4 +24,9 @@
     <Using Include="System.IO" />
   </ItemGroup>
 
+  <!-- Внутренние помощники проверяются тестами, а выносить их в публичный API ради этого не нужно. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="AudioVisualizer.Tests" />
+  </ItemGroup>
+
 </Project>

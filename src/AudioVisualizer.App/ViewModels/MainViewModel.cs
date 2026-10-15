@@ -138,6 +138,31 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </remarks>
     public Action<double>? PositionChanged { get; set; }
 
+    /// <summary>
+    /// Сообщение для показа окном: и об ошибке, и об удачной выгрузке. Заголовок и текст
+    /// разведены: заголовок короткий и повторяет префикс строки статуса, а текст бывает
+    /// на пол-экрана, и в строке статуса он обрезается.
+    /// </summary>
+    public Action<Notice>? NoticeRequested { get; set; }
+
+    /// <summary>
+    /// Собирает отчёт об ошибке и отдаёт его в строку статуса и окну. Строка остаётся на
+    /// месте: после закрытия окна текст всё равно должен быть виден, и по нему же проверяют
+    /// ошибки тесты.
+    /// </summary>
+    private void ReportError(string title, Exception exception)
+    {
+        var notice = new Notice(title, exception.Message);
+
+        Status = $"{notice.Title}: {notice.Message}";
+
+        // Все четыре места вызова живут на потоке интерфейса: два в обработчиках команд,
+        // два в продолжениях await, которые возвращаются на SynchronizationContext окна.
+        // Диспетчеризации здесь нет намеренно: вызов из фонового потока упал бы громко,
+        // а тихая обвязка скрыла бы ошибку.
+        NoticeRequested?.Invoke(notice);
+    }
+
     public string TimeLabel => $"{TimeSpan.FromSeconds(PositionSeconds):mm\\:ss} / {Duration:mm\\:ss}";
 
     [RelayCommand]
@@ -265,10 +290,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
             ExportProgress = 1d;
             Status = $"Готово: {result.Frames} кадров за {result.Elapsed:mm\\:ss}, {Path.GetFileName(result.Path)}";
+
+            // Окно об успехе тоже легко пропустить: строка статуса одна, она мелькает и
+            // остаётся в углу. Но галочка «тихая выгрузка» его отключает - кому не надо
+            // подтверждать готовность каждый раз.
+            if (!Settings.QuietExport)
+            {
+                NoticeRequested?.Invoke(new Notice(
+                    "Выгрузка готова",
+                    $"{Status}{Environment.NewLine}{Environment.NewLine}{result.Path}",
+                    Path.GetDirectoryName(result.Path)));
+            }
         }
         catch (Exception exception)
         {
-            Status = "Не удалось выгрузить видео: " + exception.Message;
+            ReportError("Не удалось выгрузить видео", exception);
         }
         finally
         {
@@ -309,7 +345,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch (Exception exception) when (exception is AudioDecodeException or FileNotFoundException or IOException)
         {
             FileTitle = "Файл не выбран";
-            Status = "Не удалось открыть файл: " + exception.Message;
+            ReportError("Не удалось открыть файл", exception);
         }
         finally
         {
@@ -386,8 +422,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // Формат мог быть декодирован через ffmpeg, а NAudio его не играет: об этом честно
-            // сообщаем в строке статуса, а не молча оставляем кнопку включённой.
-            Status = "Не удалось включить воспроизведение: " + exception.Message;
+            // сообщаем и в строке статуса, и окном, а не молча оставляем кнопку включённой.
+            ReportError("Не удалось включить воспроизведение", exception);
             return;
         }
 
@@ -428,7 +464,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception)
         {
-            Status = "Ошибка перемотки: " + exception.Message;
+            ReportError("Ошибка перемотки", exception);
 
             return;
         }

@@ -22,7 +22,8 @@ public static class BuiltInExportPresets
                 FramesPerSecond = 60,
                 Crf = 18,
                 CodecPreset = "medium",
-                AudioBitrateKbps = 192
+                AudioBitrateKbps = 192,
+                AacCoder = ExportSettings.DefaultAacCoder
             }
         },
         new()
@@ -35,7 +36,8 @@ public static class BuiltInExportPresets
                 FramesPerSecond = 30,
                 Crf = 18,
                 CodecPreset = "medium",
-                AudioBitrateKbps = 192
+                AudioBitrateKbps = 192,
+                AacCoder = ExportSettings.DefaultAacCoder
             }
         },
         new()
@@ -48,7 +50,8 @@ public static class BuiltInExportPresets
                 FramesPerSecond = 30,
                 Crf = 18,
                 CodecPreset = "medium",
-                AudioBitrateKbps = 192
+                AudioBitrateKbps = 192,
+                AacCoder = ExportSettings.DefaultAacCoder
             }
         }
     ];

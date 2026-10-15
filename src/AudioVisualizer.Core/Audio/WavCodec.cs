@@ -13,6 +13,9 @@ public static class WavCodec
     private const int FormatIeeeFloat = 3;
     private const int FormatExtensible = 0xFFFE;
 
+    /// <summary>Сэмплов в одной записи в поток. Мелкие блоки сокращают число вызовов, но не память.</summary>
+    private const int WriteBlockSamples = 4096;
+
     public static AudioData Read(Stream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
@@ -121,9 +124,28 @@ public static class WavCodec
         writer.Write("data"u8);
         writer.Write(dataSize);
 
+        // Сэмплы пишутся блоками, а не по одному: BinaryWriter.Write(short) дергает поток на каждый
+        // сэмпл, а на треке в четыре минуты это десятки миллионов вызовов, и на таком файле
+        // приложение вставало на всё время записи.
+        var block = new byte[WriteBlockSamples * 2];
+        var filled = 0;
+
         foreach (var sample in samples)
         {
-            writer.Write((short)MathF.Round(Math.Clamp(sample, -1f, 1f) * 32767f));
+            var value = Math.Clamp(AudioData.Finite(sample), -1f, 1f);
+            BinaryPrimitives.WriteInt16LittleEndian(block.AsSpan(filled), (short)MathF.Round(value * 32767f));
+            filled += 2;
+
+            if (filled == block.Length)
+            {
+                stream.Write(block, 0, filled);
+                filled = 0;
+            }
+        }
+
+        if (filled > 0)
+        {
+            stream.Write(block, 0, filled);
         }
     }
 
@@ -163,7 +185,9 @@ public static class WavCodec
                     : BinaryPrimitives.ReadInt16LittleEndian(payload.AsSpan(index)) / 32768f;
             }
 
-            samples[frame] = sum / channels;
+            // Нечисловые сэмплы в float-WAV возможны, а сумма каналов с таким значением портит весь
+            // кадр: сумма остаётся нечисловой и уезжает дальше в столбики и в WAV для ffmpeg.
+            samples[frame] = AudioData.Finite(sum / channels);
         }
 
         return samples;

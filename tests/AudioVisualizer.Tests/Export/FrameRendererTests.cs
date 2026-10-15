@@ -56,6 +56,29 @@ public class FrameRendererTests
     }
 
     [Fact]
+    public void Render_ТихийКадр_НеНаследуетПредыдущий()
+    {
+        // Прозрачный фон не пишет в буфер ни одного пикселя, поэтому след громкого кадра
+        // остался бы на месте, если бы цель не очищалась: Render у RenderTargetBitmap
+        // очищает её не сам. Сравниваем не с нулями (центральная линия рисуется всегда),
+        // а с тихим кадром, собранным начисто.
+        var colors = new ColorSettings { Background = RgbaColor.Transparent };
+        var loud = Enumerable.Repeat(1f, 32).ToArray();
+
+        var afterLoud = Sta.Get(() =>
+        {
+            var renderer = new FrameRenderer(320, 240, colors, Bars);
+            renderer.Render(loud);
+
+            return renderer.Render(new float[32]).ToArray();
+        });
+
+        var fresh = RenderFrame(new float[32], colors);
+
+        Assert.Equal(fresh, afterLoud);
+    }
+
+    [Fact]
     public void СлишкомМногоЗначений_ЛишниеНеЛомаютКадр()
     {
         var expected = RenderFrame(new float[32]);
@@ -76,6 +99,6 @@ public class FrameRendererTests
         => Assert.Throws<ArgumentOutOfRangeException>(
             () => Sta.Get(() => new FrameRenderer(width, height, new ColorSettings(), Bars)));
 
-    private static byte[] RenderFrame(float[] values)
-        => Sta.Get(() => new FrameRenderer(320, 240, new ColorSettings(), Bars).Render(values).ToArray());
+    private static byte[] RenderFrame(float[] values, ColorSettings? colors = null)
+        => Sta.Get(() => new FrameRenderer(320, 240, colors ?? new ColorSettings(), Bars).Render(values).ToArray());
 }

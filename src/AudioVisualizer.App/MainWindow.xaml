@@ -11,7 +11,7 @@
         Height="920"
         MinWidth="1100"
         MinHeight="680"
-        Background="#FF232329">
+        Background="{StaticResource WindowBackground}">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -29,10 +29,18 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Button Width="140"
-                    Padding="10,6"
+            <!--
+                Кнопки без подписи: название живёт в ToolTip и в AutomationProperties.Name.
+                Второе нужно, чтобы кнопка была названа программе чтения с экрана - по одному
+                ToolTip этого не добиться. Рисунок вынесен в Path: состояния иконки
+                (светлеет при наведении, гаснет при отключении) берутся у кнопки-предка.
+            -->
+            <Button Style="{StaticResource IconButton}"
                     Command="{Binding OpenFileCommand}"
-                    Content="Открыть файл" />
+                    ToolTip="Открыть файл"
+                    AutomationProperties.Name="Открыть файл">
+                <Path Style="{StaticResource IconPath}" Data="{StaticResource IconOpen}" />
+            </Button>
 
             <!--
                 Имя файла и длительность живут в колонке на всю оставшуюся ширину: в DockPanel
@@ -52,15 +60,19 @@
             </StackPanel>
 
             <StackPanel Grid.Column="2" Margin="24,0,0,0" Orientation="Horizontal">
-                <Button Width="160"
-                        Margin="0,0,8,0"
-                        Padding="10,6"
+                <Button Style="{StaticResource IconButton}"
                         Command="{Binding SaveSettingsCommand}"
-                        Content="Сохранить настройки" />
-                <Button Width="130"
-                        Padding="10,6"
+                        ToolTip="Сохранить настройки"
+                        AutomationProperties.Name="Сохранить настройки">
+                    <Path Style="{StaticResource IconPath}" Data="{StaticResource IconSave}" />
+                </Button>
+                <Button Margin="8,0,0,0"
+                        Style="{StaticResource IconButton}"
                         Command="{Binding ResetSettingsCommand}"
-                        Content="Сбросить" />
+                        ToolTip="Сбросить все настройки"
+                        AutomationProperties.Name="Сбросить все настройки">
+                    <Path Style="{StaticResource IconPathSolid}" Data="{StaticResource IconReset}" />
+                </Button>
             </StackPanel>
         </Grid>
 
@@ -74,19 +86,28 @@
             </Grid.ColumnDefinitions>
 
             <Button Width="44"
-                    Padding="0,4"
-                    FontSize="14"
+                    Height="34"
                     IsEnabled="{Binding HasTrack}"
                     Command="{Binding TogglePlayCommand}">
-                <!-- Символ и подсказка заданы в стиле: локальные значения перебили бы триггер. -->
+                <!-- Иконка и подсказка задаются в стиле: локальные значения перебили бы триггер. -->
                 <Button.Style>
-                    <Style TargetType="{x:Type Button}">
-                        <Setter Property="Content" Value="▶" />
+                    <Style TargetType="{x:Type Button}" BasedOn="{StaticResource IconButton}">
+                        <Setter Property="Content">
+                            <Setter.Value>
+                                <Path Style="{StaticResource IconPath}" Data="{StaticResource IconPlay}" />
+                            </Setter.Value>
+                        </Setter>
                         <Setter Property="ToolTip" Value="Воспроизвести" />
+                        <Setter Property="AutomationProperties.Name" Value="Воспроизвести" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                                <Setter Property="Content" Value="⏸" />
+                                <Setter Property="Content">
+                                    <Setter.Value>
+                                        <Path Style="{StaticResource IconPath}" Data="{StaticResource IconPause}" />
+                                    </Setter.Value>
+                                </Setter>
                                 <Setter Property="ToolTip" Value="Пауза" />
+                                <Setter Property="AutomationProperties.Name" Value="Пауза" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
@@ -95,13 +116,15 @@
 
             <Button Grid.Column="1"
                     Width="44"
+                    Height="34"
                     Margin="6,0,0,0"
-                    Padding="0,4"
-                    FontSize="14"
                     IsEnabled="{Binding HasTrack}"
                     Command="{Binding StopPlaybackCommand}"
-                    Content="⏹"
-                    ToolTip="Остановить и вернуть в начало" />
+                    ToolTip="Остановить и вернуть в начало"
+                    AutomationProperties.Name="Остановить"
+                    Style="{StaticResource IconButton}">
+                <Path Style="{StaticResource IconPath}" Data="{StaticResource IconStop}" />
+            </Button>
 
 <!--
                 Значение ползунка намеренно не привязано к модели представления.
@@ -146,8 +169,8 @@
             </Grid.ColumnDefinitions>
 
             <Border Margin="0,0,12,12"
-                    Background="#FF15151A"
-                    BorderBrush="#FF15151A"
+                    Background="{StaticResource PreviewBackground}"
+                    BorderBrush="{StaticResource PreviewBackground}"
                     BorderThickness="1">
                 <Viewbox Stretch="Uniform">
                     <Border Width="{Binding PreviewWidth}"
@@ -186,6 +209,17 @@
                                 <controls:SettingRow Label="Центральная линия">
                                     <controls:ColorPicker Color="{Binding Settings.CenterLineColor, Mode=TwoWay}" />
                                 </controls:SettingRow>
+
+                                <!-- Сброс вкладки возвращает только её настройки: общая кнопка
+                                     сверху трогает всё сразу и настроить половину экрана так нельзя. -->
+                                <Button HorizontalAlignment="Right"
+                                        Margin="0,10,0,0"
+                                        Style="{StaticResource IconButton}"
+                                        ToolTip="Сбросить цвета"
+                                        Command="{Binding Settings.ResetColorsCommand}"
+                                        AutomationProperties.Name="Сбросить цвета">
+                                    <Path Style="{StaticResource IconPathSolid}" Data="{StaticResource IconReset}" />
+                                </Button>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -230,6 +264,15 @@
                                               VerticalAlignment="Bottom"
                                               ToolTip="Столбики расходятся от центра вверх и вниз" />
                                 </controls:SettingRow>
+
+                                <Button HorizontalAlignment="Right"
+                                        Margin="0,10,0,0"
+                                        Style="{StaticResource IconButton}"
+                                        ToolTip="Сбросить столбики"
+                                        Command="{Binding Settings.ResetBarsCommand}"
+                                        AutomationProperties.Name="Сбросить столбики">
+                                    <Path Style="{StaticResource IconPathSolid}" Data="{StaticResource IconReset}" />
+                                </Button>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -289,6 +332,15 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+
+                                <Button HorizontalAlignment="Right"
+                                        Margin="0,10,0,0"
+                                        Style="{StaticResource IconButton}"
+                                        ToolTip="Сбросить спектр и эквалайзер"
+                                        Command="{Binding Settings.ResetSpectrumCommand}"
+                                        AutomationProperties.Name="Сбросить спектр и эквалайзер">
+                                    <Path Style="{StaticResource IconPathSolid}" Data="{StaticResource IconReset}" />
+                                </Button>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -298,6 +350,65 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,8,0,0">
                             <StackPanel>
                                 <TextBlock Text="Видео выгружается в mp4 (H.264 + AAC)." Style="{StaticResource SectionHeader}" />
+
+<!--
+                                    Пресет вынесен над ползунками: сначала выбирается готовый
+                                    набор, потом он подстраивается под себя. Свой пресет -
+                                    это весь набор параметров ролика, а не только размер,
+                                    поэтому выбор ручной правки сбрасывает.
+                                -->
+                                <controls:SettingRow Label="Пресет выгрузки">
+                                    <StackPanel>
+                                        <ComboBox ItemsSource="{Binding Settings.ExportPresets}"
+                                                  ItemTemplate="{StaticResource ExportPresetTemplate}"
+                                                  SelectedItem="{Binding Settings.SelectedExportPreset, Mode=TwoWay}" />
+                                        <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                                            <Button Style="{StaticResource IconButton}"
+                                                    ToolTip="Сохранить пресет"
+                                                    AutomationProperties.Name="Сохранить пресет"
+                                                    Command="{Binding Settings.StartNamingExportPresetCommand}">
+                                                <Path Style="{StaticResource IconPath}" Data="{StaticResource IconSaveAs}" />
+                                            </Button>
+                                            <Button Margin="6,0,0,0"
+                                                    Style="{StaticResource IconButton}"
+                                                    ToolTip="Удалить пресет"
+                                                    AutomationProperties.Name="Удалить пресет"
+                                                    Command="{Binding Settings.DeleteExportPresetCommand}">
+                                                <Path Style="{StaticResource IconPath}" Data="{StaticResource IconDelete}" />
+                                            </Button>
+                                        </StackPanel>
+
+<!--
+                                            Поле имени и сообщение о нём живут вместе: вне этого
+                                            блока пустая строка сообщения съедала бы место под
+                                            списком, а появляется сообщение именно здесь.
+                                        -->
+                                        <StackPanel Margin="0,6,0,0"
+                                                    Visibility="{Binding Settings.IsNamingExportPreset, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <TextBox Text="{Binding Settings.NewExportPresetName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                            <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                                                <Button Style="{StaticResource IconButton}"
+                                                        ToolTip="Применить"
+                                                        AutomationProperties.Name="Применить"
+                                                        Command="{Binding Settings.SaveExportPresetCommand}">
+                                                    <Path Style="{StaticResource IconPath}" Data="{StaticResource IconSave}" />
+                                                </Button>
+                                                <Button Margin="6,0,0,0"
+                                                        Style="{StaticResource IconButton}"
+                                                        ToolTip="Отмена"
+                                                        AutomationProperties.Name="Отмена"
+                                                        Command="{Binding Settings.CancelNamingExportPresetCommand}">
+                                                    <Path Style="{StaticResource IconPath}" Data="{StaticResource IconCancel}" />
+                                                </Button>
+                                            </StackPanel>
+                                            <TextBlock Margin="0,6,0,0"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       Text="{Binding Settings.PresetsMessage}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </controls:SettingRow>
+
                                 <controls:SettingRow Label="{Binding Settings.ExportWidth, StringFormat={}Ширина: {0} px}">
                                     <Slider Minimum="320" Maximum="3840" Value="{Binding Settings.ExportWidth, Mode=TwoWay}" />
                                 </controls:SettingRow>
@@ -306,11 +417,6 @@
                                 </controls:SettingRow>
                                 <controls:SettingRow Label="{Binding Settings.ExportFramesPerSecond, StringFormat={}Кадров в секунду: {0}}">
                                     <Slider Minimum="1" Maximum="120" Value="{Binding Settings.ExportFramesPerSecond, Mode=TwoWay}" />
-                                </controls:SettingRow>
-                                <controls:SettingRow Label="Пресет размера">
-                                    <ComboBox ItemsSource="{Binding Settings.SizePresets}"
-                                              ItemTemplate="{StaticResource ChoiceTemplate}"
-                                              SelectedItem="{Binding Settings.SelectedSizePreset, Mode=TwoWay}" />
                                 </controls:SettingRow>
                                 <controls:SettingRow Label="{Binding Settings.Crf, StringFormat={}Качество CRF {0}}">
                                     <Slider Minimum="0" Maximum="40" Value="{Binding Settings.Crf, Mode=TwoWay}" />
@@ -328,6 +434,15 @@
                                            Text="Путь к ffmpeg.exe. Пусто - искать в PATH." />
                                 <TextBox Text="{Binding Settings.FfmpegPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
+                                <Button HorizontalAlignment="Right"
+                                        Margin="0,10,0,0"
+                                        Style="{StaticResource IconButton}"
+                                        ToolTip="Сбросить параметры выгрузки"
+                                        Command="{Binding Settings.ResetExportCommand}"
+                                        AutomationProperties.Name="Сбросить параметры выгрузки">
+                                    <Path Style="{StaticResource IconPathSolid}" Data="{StaticResource IconReset}" />
+                                </Button>
+
 <!--
                                     Выгрузка считает кадры в фоне и занимает все ядра, поэтому
                                     идёт отдельным потоком и показывает прогресс. Отмена
@@ -335,15 +450,21 @@
                                 -->
                                 <TextBlock Margin="0,16,0,0" Style="{StaticResource SectionHeader}" Text="Выгрузка" />
                                 <StackPanel Orientation="Horizontal">
-                                    <Button Width="180"
-                                            Padding="10,6"
-                                            Content="Выгрузить mp4"
-                                            Command="{Binding ExportVideoCommand}" />
-                                    <Button Width="110"
-                                            Margin="8,0,0,0"
-                                            Padding="10,6"
-                                            Content="Отмена"
-                                            Command="{Binding CancelExportCommand}" />
+                                    <Button Style="{StaticResource IconButton}"
+                                            Width="36"
+                                            Height="32"
+                                            ToolTip="Выгрузить mp4"
+                                            AutomationProperties.Name="Выгрузить mp4"
+                                            Command="{Binding ExportVideoCommand}">
+                                        <Path Style="{StaticResource IconPath}" Data="{StaticResource IconExport}" />
+                                    </Button>
+                                    <Button Margin="8,0,0,0"
+                                            Style="{StaticResource IconButton}"
+                                            ToolTip="Отменить выгрузку"
+                                            AutomationProperties.Name="Отменить выгрузку"
+                                            Command="{Binding CancelExportCommand}">
+                                        <Path Style="{StaticResource IconPath}" Data="{StaticResource IconCancel}" />
+                                    </Button>
                                 </StackPanel>
                                 <ProgressBar Margin="0,10,0,0"
                                              Height="4"

@@ -5,6 +5,7 @@ using AudioVisualizer.Core.Settings;
 
 namespace AudioVisualizer.Tests.Rendering;
 
+[Collection(WpfUi.Name)]
 public class SpectrumElementTests
 {
     private const double FrameWidth = 800d;

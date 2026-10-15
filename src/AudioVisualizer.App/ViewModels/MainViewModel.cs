@@ -51,14 +51,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         AppSettingsStore? store = null,
         AudioLoader? loader = null,
         IAudioPlayer? player = null,
-        IVideoExporter? exporter = null)
+        IVideoExporter? exporter = null,
+        ExportPresetStore? presetStore = null)
     {
         _store = store ?? new AppSettingsStore();
         _loader = loader ?? new AudioLoader();
         _player = player ?? new AudioPlayer();
         _exporter = exporter ?? new Mp4Exporter();
 
-        Settings = new SettingsViewModel(_store.Load());
+        Settings = new SettingsViewModel(_store.Load(), presetStore);
         Settings.Changed += OnSettingsChanged;
 
         PreviewWidth = Settings.ExportWidth;

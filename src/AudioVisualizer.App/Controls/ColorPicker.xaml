@@ -9,7 +9,7 @@
             <Border x:Name="Swatch"
                     Width="52"
                     Height="24"
-                    BorderBrush="#FF6A6A70"
+                    BorderBrush="{StaticResource SwatchBorderBrush}"
                     BorderThickness="1"
                     Cursor="Hand"
                     MouseLeftButtonUp="OnSwatchClick"
@@ -17,7 +17,7 @@
             <TextBlock x:Name="HexLabel"
                        Margin="10,0,0,0"
                        VerticalAlignment="Center"
-                       Foreground="#FFD0D0D0"
+                       Foreground="{StaticResource PopupTextBrush}"
                        FontFamily="Consolas" />
         </StackPanel>
 
@@ -28,32 +28,32 @@
             <Border Margin="0,4,0,0"
                     Padding="12"
                     Width="260"
-                    Background="#FF2E2E35"
-                    BorderBrush="#FF55555C"
+                    Background="{StaticResource PopupBackground}"
+                    BorderBrush="{StaticResource PopupBorderBrush}"
                     BorderThickness="1"
                     PreviewKeyDown="OnPreviewKeyDown">
                 <StackPanel>
 
-                    <TextBlock Text="Красный" Foreground="#FFD0D0D0" Margin="0,0,0,2" />
+                    <TextBlock Text="Красный" Foreground="{StaticResource PopupTextBrush}" Margin="0,0,0,2" />
                     <Slider x:Name="RedSlider" Minimum="0" Maximum="255" IsSnapToTickEnabled="True" ValueChanged="OnChannelChanged" />
 
-                    <TextBlock Text="Зелёный" Foreground="#FFD0D0D0" Margin="0,8,0,2" />
+                    <TextBlock Text="Зелёный" Foreground="{StaticResource PopupTextBrush}" Margin="0,8,0,2" />
                     <Slider x:Name="GreenSlider" Minimum="0" Maximum="255" IsSnapToTickEnabled="True" ValueChanged="OnChannelChanged" />
 
-                    <TextBlock Text="Синий" Foreground="#FFD0D0D0" Margin="0,8,0,2" />
+                    <TextBlock Text="Синий" Foreground="{StaticResource PopupTextBrush}" Margin="0,8,0,2" />
                     <Slider x:Name="BlueSlider" Minimum="0" Maximum="255" IsSnapToTickEnabled="True" ValueChanged="OnChannelChanged" />
 
-                    <TextBlock Text="Прозрачность (A)" Foreground="#FFD0D0D0" Margin="0,8,0,2" />
+                    <TextBlock Text="Прозрачность (A)" Foreground="{StaticResource PopupTextBrush}" Margin="0,8,0,2" />
                     <Slider x:Name="AlphaSlider" Minimum="0" Maximum="255" IsSnapToTickEnabled="True" ValueChanged="OnChannelChanged" />
 
                     <CheckBox x:Name="TransparentCheckBox"
                               Margin="0,10,0,0"
                               Content="Прозрачный цвет (A = 0)"
-                              Foreground="#FFD0D0D0"
+                              Foreground="{StaticResource PopupTextBrush}"
                               Checked="OnTransparentChecked"
                               Unchecked="OnTransparentChecked" />
 
-                    <TextBlock Text="Цвет в формате #RRGGBBAA" Foreground="#FFD0D0D0" Margin="0,10,0,2" />
+                    <TextBlock Text="Цвет в формате #RRGGBBAA" Foreground="{StaticResource PopupTextBrush}" Margin="0,10,0,2" />
                     <TextBox x:Name="HexInput"
                              FontFamily="Consolas"
                              KeyDown="OnHexKeyDown"

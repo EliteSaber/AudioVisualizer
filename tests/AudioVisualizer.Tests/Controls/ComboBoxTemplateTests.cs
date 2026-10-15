@@ -6,6 +6,7 @@ using AudioVisualizer.Core.Settings;
 
 namespace AudioVisualizer.Tests.Controls;
 
+[Collection(WpfUi.Name)]
 public class ComboBoxTemplateTests
 {
     // Регрессия: закрытое значение выводилось как "Choice { Value = ... }", потому что

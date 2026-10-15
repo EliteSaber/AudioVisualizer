@@ -4,6 +4,7 @@ using AudioVisualizer.Core.Settings;
 
 namespace AudioVisualizer.Tests.Controls;
 
+[Collection(WpfUi.Name)]
 public class ColorPickerTests
 {
     // Регрессия: значение по умолчанию у свойства зависимостей передавалось как default,

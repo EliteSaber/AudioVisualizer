@@ -102,6 +102,42 @@ public static class SettingsNormalizer
         };
     }
 
+    /// <summary>
+    /// Приводит список пресетов выгрузки к пригодному виду: имя обрезается, значения
+    /// нормализуются как обычные настройки экспорта, безымянные пресеты и повторы имён
+    /// отбрасываются. Файл правится руками, поэтому дубль не должен превращаться в два
+    /// одинаковых пункта списка.
+    /// </summary>
+    public static IReadOnlyList<ExportPreset> NormalizeExportPresets(IEnumerable<ExportPreset>? presets)
+    {
+        if (presets is null)
+        {
+            return [];
+        }
+
+        var result = new List<ExportPreset>();
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var preset in presets)
+        {
+            if (preset is null)
+            {
+                continue;
+            }
+
+            var name = preset.Name?.Trim() ?? string.Empty;
+
+            if (name.Length == 0 || !names.Add(name))
+            {
+                continue;
+            }
+
+            result.Add(preset with { Name = name, Settings = NormalizeExport(preset.Settings ?? new ExportSettings()) });
+        }
+
+        return result;
+    }
+
     public static IReadOnlyList<EqualizerBand> NormalizeEqualizer(IReadOnlyList<EqualizerBand>? bands)
     {
         if (bands is null || bands.Count == 0)

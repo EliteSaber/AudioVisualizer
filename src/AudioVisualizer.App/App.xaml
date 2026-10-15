@@ -1,13 +1,28 @@
-﻿<Application x:Class="AudioVisualizer.App.App"
+<Application x:Class="AudioVisualizer.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:AudioVisualizer.App.Controls"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
+        <ResourceDictionary>
+
+            <!--
+                Иконки кнопок лежат отдельным словарём: их много, они однотипные и к панели
+                настроек отношения не имеют.
+            -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme/Icons.xaml" />
+            </ResourceDictionary.MergedDictionaries>
 
         <!--
             Тёмная панель настроек: цвета заданы здесь, а не в каждом элементе. Фон кадра
             визуализации берётся из настроек и к панели отношения не имеет.
+
+Все кисти подставляются через StaticResource. Замена их на DynamicResource ради
+            будущей светлой темы приводит к переполнению стека на запуске: подстановка внутри
+            значения словаря инвалидируется в момент, когда этот словарь ещё не закончил
+            создавать своё значение. Значения цветов при выносе не менялись - внешний вид
+            должен остаться прежним.
         -->
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
@@ -21,6 +36,15 @@
             <TextBlock Text="{Binding Title}" />
         </DataTemplate>
 
+        <!-- Подпись пресета выгрузки: имя плюс параметры, чтобы в списке было видно, что внутри.
+             Запятая в StringFormat экранирована: разделитель пар свойств разметки тоже запятая. -->
+        <DataTemplate x:Key="ExportPresetTemplate">
+            <TextBlock>
+                <Run Text="{Binding Name}" />
+                <Run Text="{Binding Settings, StringFormat={} — {0.Width}x{0.Height}\, {0.FramesPerSecond} к/с}" />
+            </TextBlock>
+        </DataTemplate>
+
         <SolidColorBrush x:Key="PanelBackground" Color="#FF2B2B31" />
         <SolidColorBrush x:Key="PanelBorder" Color="#FF45454D" />
         <SolidColorBrush x:Key="TextBrush" Color="#FFE2E2E6" />
@@ -28,6 +52,106 @@
         <SolidColorBrush x:Key="ControlBackground" Color="#FF3A3A42" />
         <SolidColorBrush x:Key="SelectionBackground" Color="#FF2F6FD0" />
         <SolidColorBrush x:Key="SelectionText" Color="#FFFFFFFF" />
+        <SolidColorBrush x:Key="WindowBackground" Color="#FF232329" />
+        <SolidColorBrush x:Key="PreviewBackground" Color="#FF15151A" />
+        <SolidColorBrush x:Key="HoverBorderBrush" Color="#FF7A7A88" />
+        <SolidColorBrush x:Key="ItemHighlightBrush" Color="#FF4C4C57" />
+        <SolidColorBrush x:Key="TabHoverBrush" Color="#FF44444E" />
+        <SolidColorBrush x:Key="TabSelectedBrush" Color="#FF585865" />
+        <SolidColorBrush x:Key="PopupBackground" Color="#FF2E2E35" />
+        <SolidColorBrush x:Key="PopupBorderBrush" Color="#FF55555C" />
+        <SolidColorBrush x:Key="PopupTextBrush" Color="#FFD0D0D0" />
+<SolidColorBrush x:Key="SwatchBorderBrush" Color="#FF6A6A70" />
+
+        <!--
+            Состояния иконки отдельно от цвета текста: при наведении иконка светлеет, при
+            отключении гаснет. Отдельными кистями, а не прозрачностью всей кнопки, потому
+            что прозрачность гасила бы и подложку, и всплывающую подсказку.
+        -->
+        <SolidColorBrush x:Key="IconBrush" Color="#FFE2E2E6" />
+        <SolidColorBrush x:Key="IconHoverBrush" Color="#FFFFFFFF" />
+
+        <!--
+            Кнопка-иконка без подписи: подпись переехала в ToolTip и в AutomationProperties.Name,
+            поэтому без него кнопка не называется ни мышью, ни программой чтения с экрана.
+
+            Своя подложка обязательна: тема Aero2 красит фон прямо на внутреннем Border
+            шаблона, и иконка оказалась бы на серой системной кнопке. SnapsToDevicePixels не
+            даёт штрихам ползти на дробном масштабе.
+
+            Стиль и шаблон живут здесь, а не в Theme\Icons.xaml вместе с контурами: тот
+            словарь подключается через Source и грузится лениво. В этом файле остаются
+            только геометрии - они ни на что не ссылаются.
+        -->
+        <ControlTemplate x:Key="IconButtonTemplate" TargetType="{x:Type Button}">
+            <Border x:Name="Surface"
+                    Padding="{TemplateBinding Padding}"
+                    Background="Transparent"
+                    CornerRadius="3"
+                    SnapsToDevicePixels="True">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Surface" Property="Background" Value="{StaticResource ControlBackground}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter TargetName="Surface" Property="Opacity" Value="0.6" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.35" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style x:Key="IconButton" TargetType="{x:Type Button}">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template" Value="{StaticResource IconButtonTemplate}" />
+        </Style>
+
+        <!--
+            Рисунок иконки. Состояние одно - наведение, и его приходится спрашивать у
+            кнопки-предка: IsMouseOver не наследуется, и у Path своего состояния нет.
+
+            Отдельного цвета для отключённой иконки нет намеренно: гасит вся кнопка в
+            шаблоне (Opacity), и второй триггер с собственной раскраской только дублировал бы
+            то же самое. Обращение к IsEnabled рисунка с RelativeSource AncestorType работало бы,
+            но держится на визуальном дереве и слетает, пока кнопка не измерена.
+        -->
+        <Style x:Key="IconPath" TargetType="{x:Type Path}">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="Stretch" Value="Uniform" />
+            <Setter Property="Fill" Value="Transparent" />
+            <Setter Property="Stroke" Value="{StaticResource IconBrush}" />
+            <Setter Property="StrokeThickness" Value="1.6" />
+            <Setter Property="StrokeEndLineCap" Value="Round" />
+            <Setter Property="StrokeLineJoin" Value="Round" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                    <Setter Property="Stroke" Value="{StaticResource IconHoverBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--
+            Залитый вариант рисунка: стрелка кругового обновления задана заливкой, и обводка
+            дала бы тонкий контур вместо стрелки. Состояние наведения наследуется от
+            IconPath, поэтому правится в одном месте и для обоих вариантов.
+        -->
+        <Style x:Key="IconPathSolid" TargetType="{x:Type Path}" BasedOn="{StaticResource IconPath}">
+            <Setter Property="Fill" Value="{StaticResource IconBrush}" />
+            <Setter Property="Stroke" Value="{x:Null}" />
+            <Setter Property="StrokeThickness" Value="0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                    <Setter Property="Fill" Value="{StaticResource IconHoverBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <Style TargetType="{x:Type controls:SettingRow}">
             <Setter Property="Template">
@@ -156,10 +280,10 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ToggleRoot" Property="BorderBrush" Value="#FF7A7A88" />
+                                <Setter TargetName="ToggleRoot" Property="BorderBrush" Value="{StaticResource HoverBorderBrush}" />
                             </Trigger>
                             <Trigger Property="IsDropDownOpen" Value="True">
-                                <Setter TargetName="ToggleRoot" Property="BorderBrush" Value="#FF7A7A88" />
+                                <Setter TargetName="ToggleRoot" Property="BorderBrush" Value="{StaticResource HoverBorderBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -181,7 +305,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemRoot" Property="Background" Value="#FF4C4C57" />
+                                <Setter TargetName="ItemRoot" Property="Background" Value="{StaticResource ItemHighlightBrush}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="ItemRoot" Property="Background" Value="{StaticResource SelectionBackground}" />
@@ -210,11 +334,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="TabRoot" Property="Background" Value="#FF44444E" />
+                                <Setter TargetName="TabRoot" Property="Background" Value="{StaticResource TabHoverBrush}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="TabRoot" Property="Background" Value="#FF585865" />
-                                <Setter TargetName="TabRoot" Property="BorderBrush" Value="#FF7A7A88" />
+                                <Setter TargetName="TabRoot" Property="Background" Value="{StaticResource TabSelectedBrush}" />
+                                <Setter TargetName="TabRoot" Property="BorderBrush" Value="{StaticResource HoverBorderBrush}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -223,5 +347,6 @@
             </Setter>
         </Style>
 
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

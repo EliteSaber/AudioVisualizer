@@ -5,7 +5,21 @@ namespace AudioVisualizer.Tests.ViewModels;
 
 public class SettingsViewModelTests
 {
-    private static SettingsViewModel Create(AppSettings? settings = null) => new(settings ?? AppSettings.Default);
+    private static readonly string PresetsPath = Path.Combine(Path.GetTempPath(), "av-test-exportpresets.json");
+
+    /// <summary>
+    /// У каждого теста свой пустой файл пресетов: иначе пресет, сохранённый одним тестом,
+    /// попадал бы в список другого, а результат зависел от порядка запуска.
+    /// </summary>
+    private static SettingsViewModel Create(AppSettings? settings = null)
+    {
+        if (File.Exists(PresetsPath))
+        {
+            File.Delete(PresetsPath);
+        }
+
+        return new SettingsViewModel(settings ?? AppSettings.Default, new ExportPresetStore(PresetsPath));
+    }
 
     [Fact]
     public void Конструктор_РазбираетНастройки_НаПоля()
@@ -78,37 +92,76 @@ public class SettingsViewModelTests
     }
 
     [Fact]
-    public void ВыборПресетaРазмера_ПроставляетРазмеры()
+    public void ВыборПресетa_ПроставляетПараметрыРолика()
     {
         var viewModel = Create();
 
-        viewModel.SelectedSizePreset = viewModel.SizePresets.First(choice => choice.Value == "1080p30");
+        viewModel.SelectedExportPreset = viewModel.ExportPresets.First(preset => preset.Name == "720p30");
 
-        Assert.Equal(1920, viewModel.ExportWidth);
-        Assert.Equal(1080, viewModel.ExportHeight);
+        Assert.Equal(1280, viewModel.ExportWidth);
+        Assert.Equal(720, viewModel.ExportHeight);
         Assert.Equal(30, viewModel.ExportFramesPerSecond);
+        Assert.Equal(18, viewModel.Crf);
+        Assert.Equal("medium", viewModel.CodecPreset);
+        Assert.Equal(192, viewModel.AudioBitrateKbps);
     }
 
     [Fact]
-    public void ПресетРазмера_НеСбрасываетсяОтСвоихПолей()
+    public void ВыборПресетa_НеСбрасываетсяОтСвоихПолей()
     {
         var viewModel = Create();
-        var preset = viewModel.SizePresets.First(choice => choice.Value == "720p30");
+        var preset = viewModel.ExportPresets.First(preset => preset.Name == "720p30");
 
-        viewModel.SelectedSizePreset = preset;
+        viewModel.SelectedExportPreset = preset;
 
-        Assert.Same(preset, viewModel.SelectedSizePreset);
+        Assert.Same(preset, viewModel.SelectedExportPreset);
     }
 
     [Fact]
     public void РучнаяПравкаРазмера_СбрасываетПресет()
     {
         var viewModel = Create();
-        viewModel.SelectedSizePreset = viewModel.SizePresets.First(choice => choice.Value == "1080p30");
+        viewModel.SelectedExportPreset = viewModel.ExportPresets.First(preset => preset.Name == "1080p30");
 
         viewModel.ExportWidth = 1600;
 
-        Assert.Null(viewModel.SelectedSizePreset);
+        Assert.Null(viewModel.SelectedExportPreset);
+    }
+
+    [Theory]
+    [InlineData("ExportFramesPerSecond")]
+    [InlineData("Crf")]
+    [InlineData("CodecPreset")]
+    [InlineData("AudioBitrateKbps")]
+    public void РучнаяПравкаПараметраРолика_СбрасываетПресет(string propertyName)
+    {
+        var viewModel = Create();
+        viewModel.SelectedExportPreset = viewModel.ExportPresets.First(preset => preset.Name == "1080p30");
+
+        typeof(SettingsViewModel).GetProperty(propertyName)!.SetValue(
+            viewModel,
+            propertyName switch
+            {
+                "ExportFramesPerSecond" => 24,
+                "Crf" => 20,
+                "CodecPreset" => "fast",
+                _ => 256
+            });
+
+        Assert.Null(viewModel.SelectedExportPreset);
+    }
+
+    [Fact]
+    public void ПравкаПутиКFfmpeg_НеСбрасываетПресет()
+    {
+        // Путь к ffmpeg в пресет не входит, поэтому правка пути не делает набор неверным.
+        var viewModel = Create();
+        var preset = viewModel.ExportPresets.First(preset => preset.Name == "1080p30");
+        viewModel.SelectedExportPreset = preset;
+
+        viewModel.FfmpegPath = @"C:\tools\ffmpeg.exe";
+
+        Assert.Same(preset, viewModel.SelectedExportPreset);
     }
 
     [Fact]
@@ -160,6 +213,7 @@ public class SettingsViewModelTests
         Assert.NotEmpty(viewModel.CodecPresets);
         Assert.Equal(3, viewModel.CornerStyleChoices.Count);
         Assert.Equal(2, viewModel.FillModeChoices.Count);
-        Assert.Equal(3, viewModel.SizePresets.Count);
+        Assert.Equal(3, viewModel.ExportPresets.Count);
+        Assert.All(viewModel.ExportPresets, preset => Assert.False(preset.Custom));
     }
 }

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using AudioVisualizer.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace AudioVisualizer.App.ViewModels;
 
@@ -11,13 +12,24 @@ namespace AudioVisualizer.App.ViewModels;
 /// </summary>
 public sealed partial class SettingsViewModel : ObservableObject
 {
-    private bool _suppressChanged;
-    private bool _applyingSizePreset;
-    private Choice<string>? _selectedSizePreset;
+    private readonly ExportPresetStore _presetStore;
 
-    public SettingsViewModel(AppSettings settings)
+    private bool _suppressChanged;
+    private bool _applyingPreset;
+
+    public SettingsViewModel(AppSettings settings, ExportPresetStore? presetStore = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
+
+        _presetStore = presetStore ?? new ExportPresetStore();
+
+        // Встроенные идут первыми и не удаляются: свой пресет с тем же именем заменяет
+        // встроенный на месте, а не добавляется вторым пунктом с тем же именем.
+        ExportPresets = [.. BuiltInExportPresets.All];
+        foreach (var preset in _presetStore.Load())
+        {
+            ExportPresets.Add(preset);
+        }
 
         Apply(settings);
     }
@@ -53,20 +65,29 @@ public sealed partial class SettingsViewModel : ObservableObject
     public ObservableCollection<EqualizerBandViewModel> Equalizer { get; } = [];
 
     /// <summary>
-    /// Выбранный пресет размера кадра. Меняет ширину, высоту и частоту кадров, а при ручной
-    /// правке ползунков сбрасывается, чтобы список не показывал неверный размер.
+    /// Пресеты выгрузки: сначала встроенные, потом сохранённые пользователем. Коллекция
+    /// меняется на месте, а не пересоздаётся - иначе выбранный пункт списка теряется.
     /// </summary>
-    public Choice<string>? SelectedSizePreset
-    {
-        get => _selectedSizePreset;
-        set
-        {
-            if (SetProperty(ref _selectedSizePreset, value) && value is not null)
-            {
-                ApplySizePreset(value.Value);
-            }
-        }
-    }
+    public ObservableCollection<ExportPreset> ExportPresets { get; }
+
+    /// <summary>
+    /// Выбранный пресет выгрузки. Применяет все параметры ролика, а при ручной правке
+    /// сбрасывается, чтобы список не показывал неверный набор.
+    /// </summary>
+    [ObservableProperty]
+    private ExportPreset? _selectedExportPreset;
+
+    /// <summary>Показывается ли поле ввода имени нового пресета.</summary>
+    [ObservableProperty] private bool _isNamingExportPreset;
+
+    [ObservableProperty] private string _newExportPresetName = string.Empty;
+
+    /// <summary>Заметка о последней операции с пресетами: пустая, если всё прошло.</summary>
+    [ObservableProperty] private string _presetsMessage = string.Empty;
+
+    public bool CanDeleteExportPreset => SelectedExportPreset?.Custom == true;
+
+    public bool CanSaveExportPreset => !string.IsNullOrWhiteSpace(NewExportPresetName);
 
     [ObservableProperty] private RgbaColor _backgroundColor;
     [ObservableProperty] private RgbaColor _barFillColor;
@@ -207,9 +228,27 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         base.OnPropertyChanged(e);
 
-        if (e.PropertyName is nameof(ExportWidth) or nameof(ExportHeight) or nameof(ExportFramesPerSecond))
+        // Правка любого параметра ролика означает, что пресет больше не описывает текущие
+        // настройки. Путь к ffmpeg в список не входит, поэтому его правка выбор не сбрасывает.
+        if (e.PropertyName is nameof(ExportWidth)
+            or nameof(ExportHeight)
+            or nameof(ExportFramesPerSecond)
+            or nameof(Crf)
+            or nameof(CodecPreset)
+            or nameof(AudioBitrateKbps))
         {
-            ResetSizePreset();
+            ResetExportPreset();
+        }
+
+        if (e.PropertyName is nameof(SelectedExportPreset))
+        {
+            OnPropertyChanged(nameof(CanDeleteExportPreset));
+            DeleteExportPresetCommand.NotifyCanExecuteChanged();
+        }
+
+        if (e.PropertyName is nameof(NewExportPresetName))
+        {
+            SaveExportPresetCommand.NotifyCanExecuteChanged();
         }
 
         if (!_suppressChanged)
@@ -218,34 +257,172 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    public void ApplySizePreset(string preset)
+    /// <summary>Показывает поле ввода имени с текущим размером в качестве подсказки.</summary>
+    [RelayCommand]
+    private void StartNamingExportPreset()
     {
-        var (width, height, framesPerSecond) = preset switch
+        NewExportPresetName = $"{ExportWidth}x{ExportHeight}, {ExportFramesPerSecond}";
+        PresetsMessage = string.Empty;
+        IsNamingExportPreset = true;
+    }
+
+    [RelayCommand]
+    private void CancelNamingExportPreset()
+    {
+        IsNamingExportPreset = false;
+        NewExportPresetName = string.Empty;
+    }
+
+    /// <summary>Запоминает текущие параметры под введённым именем.</summary>
+    [RelayCommand(CanExecute = nameof(CanSaveExportPreset))]
+    private void SaveExportPreset()
+    {
+        var name = NewExportPresetName.Trim();
+        var preset = new ExportPreset
         {
-            "1080p60" => (1920, 1080, 60),
-            "1080p30" => (1920, 1080, 30),
-            "720p30" => (1280, 720, 30),
-            _ => (ExportWidth, ExportHeight, ExportFramesPerSecond)
+            Name = name,
+            Settings = CurrentExport() with { FfmpegPath = null },
+            Custom = true
         };
 
-        _applyingSizePreset = true;
+// Повторное имя обновляет существующий пресет на месте: два пункта с одним именем
+        // в списке выглядели бы как ошибка.
+        var index = IndexOfPreset(name);
+
+        if (index >= 0 && !ExportPresets[index].Custom)
+        {
+            // Имя встроенного пресета занято: подменив его своим, пользователь потерял бы
+            // встроенный до перезапуска программы.
+            PresetsMessage = $"Имя «{name}» занято встроенным пресетом. Придумайте другое.";
+            return;
+        }
+
+        if (index < 0)
+        {
+            ExportPresets.Add(preset);
+        }
+        else
+        {
+            ExportPresets[index] = preset;
+        }
+
+        SavePresetsToFile();
+
+        SelectedExportPreset = preset;
+        IsNamingExportPreset = false;
+        NewExportPresetName = string.Empty;
+    }
+
+    /// <summary>Удаляет пользовательский пресет. Встроенные удалить нельзя.</summary>
+    [RelayCommand(CanExecute = nameof(CanDeleteExportPreset))]
+    private void DeleteExportPreset()
+    {
+        var preset = SelectedExportPreset;
+
+        if (preset is null || !preset.Custom)
+        {
+            return;
+        }
+
+        ExportPresets.Remove(preset);
+        SelectedExportPreset = null;
+        PresetsMessage = string.Empty;
+
+        SavePresetsToFile();
+    }
+
+    [RelayCommand]
+    private void ResetColors()
+    {
+        var current = ToAppSettings();
+        Apply(current with { Colors = new ColorSettings() });
+    }
+
+    [RelayCommand]
+    private void ResetBars()
+    {
+        var current = ToAppSettings();
+        Apply(current with { Bars = new BarSettings() });
+    }
+
+    [RelayCommand]
+    private void ResetSpectrum()
+    {
+        var current = ToAppSettings();
+        Apply(current with { Spectrum = new SpectrumSettings() });
+    }
+
+    /// <summary>
+    /// Возвращает параметры ролика к умолчаниям, сохраняя путь к ffmpeg: он задаётся один
+    /// раз на машину и не должен пропадать при сбросе настроек видео.
+    /// </summary>
+    [RelayCommand]
+    private void ResetExport()
+    {
+        var current = ToAppSettings();
+        Apply(current with { Export = new ExportSettings { FfmpegPath = current.Export.FfmpegPath } });
+    }
+
+    /// <summary>Применяет пресет: все параметры ролика, кроме пути к ffmpeg.</summary>
+    public void ApplyExportPreset(ExportPreset preset)
+    {
+        ArgumentNullException.ThrowIfNull(preset);
+
+        var export = SettingsNormalizer.NormalizeExport(preset.Settings);
+
+        _applyingPreset = true;
         try
         {
-            ExportWidth = width;
-            ExportHeight = height;
-            ExportFramesPerSecond = framesPerSecond;
+            ExportWidth = export.Width;
+            ExportHeight = export.Height;
+            ExportFramesPerSecond = export.FramesPerSecond;
+            Crf = export.Crf;
+            CodecPreset = export.CodecPreset;
+            AudioBitrateKbps = export.AudioBitrateKbps;
         }
         finally
         {
-            _applyingSizePreset = false;
+            _applyingPreset = false;
         }
     }
 
-    private void ResetSizePreset()
+    private void ResetExportPreset()
     {
-        if (!_applyingSizePreset && SelectedSizePreset is not null)
+        if (!_applyingPreset && SelectedExportPreset is not null)
         {
-            SelectedSizePreset = null;
+            SelectedExportPreset = null;
+        }
+    }
+
+    private void SavePresetsToFile()
+    {
+        var saved = _presetStore.Save(ExportPresets.Where(preset => preset.Custom).ToArray());
+
+        PresetsMessage = saved
+            ? string.Empty
+            : "Не удалось сохранить пресеты: файл " + _presetStore.FilePath + " недоступен.";
+    }
+
+    private int IndexOfPreset(string name)
+    {
+        for (var index = 0; index < ExportPresets.Count; index++)
+        {
+            if (string.Equals(ExportPresets[index].Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private ExportSettings CurrentExport() => ToAppSettings().Export;
+
+    partial void OnSelectedExportPresetChanged(ExportPreset? value)
+    {
+        if (value is not null)
+        {
+            ApplyExportPreset(value);
         }
     }
 

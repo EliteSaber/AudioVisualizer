@@ -126,7 +126,8 @@ public class MainViewModelTests
         {
             await viewModel.LoadFileAsync("Z:\\нет.mp3");
 
-            viewModel.Settings.ApplySizePreset("720p30");
+            viewModel.Settings.ApplyExportPreset(
+                new ExportPreset { Name = "720p30", Settings = new ExportSettings { Width = 1280, Height = 720, FramesPerSecond = 30 } });
 
             Assert.Equal(1280, viewModel.PreviewWidth);
             Assert.Equal(720, viewModel.PreviewHeight);

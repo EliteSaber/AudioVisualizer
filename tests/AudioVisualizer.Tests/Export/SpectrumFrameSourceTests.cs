@@ -62,6 +62,135 @@ public class SpectrumFrameSourceTests
         Assert.Equal(24, source.GetBars(TimeSpan.Zero).Length);
     }
 
+    [Fact]
+    public void GetBars_ТотЖеМомент_ПродолжаетСглаживание()
+    {
+        // Тон, потом тишина: хвост падает на релиз при каждом кадре.
+        var source = CreateSource(Tone(TimeSpan.FromSeconds(0.5), 1000d));
+        source.GetBars(TimeSpan.FromSeconds(0.1d));
+
+        var first = source.GetBars(TimeSpan.FromSeconds(0.6d));
+        var second = source.GetBars(TimeSpan.FromSeconds(0.6d));
+
+        // Позиция плеера считана по прочитанным блокам звука, и между ними превью рисует
+        // один момент несколько раз: эти повторы и есть время анимации. Если источник
+        // отдаёт по ним один и тот же кадр, столбики стоят и дёргаются на границе блока.
+        Assert.InRange(first.Max(), 0.75f, 0.85f);
+        Assert.InRange(second.Max(), 0.55f, 0.7f);
+    }
+
+    [Fact]
+    public void SeedFrom_КадрПереносится()
+    {
+        // Тон, потом тишина: столбик сначала полный, потом падает на релиз и держит хвост.
+        var audio = Tone(TimeSpan.FromSeconds(0.5), 1000d);
+        var warm = CreateSource(audio);
+        warm.GetBars(TimeSpan.FromSeconds(0.1d));
+        warm.GetBars(TimeSpan.FromSeconds(0.6d));
+
+        var rebuilt = CreateSource(audio);
+        rebuilt.SeedFrom(warm);
+
+        // Показан прежний хвост, а не результат ещё одного шага сглаживания. Момент при этом
+        // может быть любым: пока он на экране, ползунок стоит на нём же.
+        Assert.InRange(rebuilt.GetBars(TimeSpan.FromSeconds(0.7d)).Max(), 0.75f, 0.85f);
+
+        // Дальше источник считает как обычно: перенос не должен замораживать картинку.
+        Assert.InRange(rebuilt.GetBars(TimeSpan.FromSeconds(0.7d)).Max(), 0.55f, 0.7f);
+    }
+
+    [Fact]
+    public void SeedFrom_ЦепочкаПравок_КадрДоходитДоКонца()
+    {
+        var audio = Tone(TimeSpan.FromSeconds(0.5), 1000d);
+        var first = CreateSource(audio);
+        first.GetBars(TimeSpan.FromSeconds(0.1d));
+        first.GetBars(TimeSpan.FromSeconds(0.6d));
+
+        // Правки настроек идут цепочкой, и каждая постройка берёт кадр у предыдущей.
+        var second = CreateSource(audio);
+        second.SeedFrom(first);
+        var third = CreateSource(audio);
+        third.SeedFrom(second);
+        var fourth = CreateSource(audio);
+        fourth.SeedFrom(third);
+
+        Assert.InRange(second.GetBars(TimeSpan.FromSeconds(0.6d)).Max(), 0.75f, 0.85f);
+        Assert.InRange(third.GetBars(TimeSpan.FromSeconds(0.6d)).Max(), 0.75f, 0.85f);
+        Assert.InRange(fourth.GetBars(TimeSpan.FromSeconds(0.6d)).Max(), 0.75f, 0.85f);
+    }
+
+    [Fact]
+    public void SeedFrom_СпектрИзменён_КадрНеПереносится()
+    {
+        var audio = Tone(TimeSpan.FromSeconds(1), 1000d);
+        var warm = CreateSource(audio);
+        warm.GetBars(TimeSpan.FromSeconds(0.5d));
+
+        // Диапазон децибел сдвинут так, что тот же тон в него больше не попадает.
+        var quiet = new SpectrumFrameSource(
+            audio,
+            SpectrumSettings.Default with { MinDecibels = 0f, MaxDecibels = 1f },
+            barCount: 64);
+
+        quiet.SeedFrom(warm);
+
+        // Кадр пересчитан, сглаживание продолжено: столбик падает на релиз, но не до нуля.
+        // Перенесённый кадр показал бы единицу, а сырой без переноса - ноль.
+        Assert.InRange(quiet.GetBars(TimeSpan.FromSeconds(0.5d)).Max(), 0.7f, 0.9f);
+    }
+
+    [Fact]
+    public void SeedFrom_СпектрИзменён_СглаживаниеПереносится()
+    {
+        var audio = Tone(TimeSpan.FromSeconds(0.5), 1000d);
+        var warm = CreateSource(audio);
+        warm.GetBars(TimeSpan.FromSeconds(0.1d));
+        warm.GetBars(TimeSpan.FromSeconds(0.6d));
+
+        var rebuilt = CreateSource(audio);
+        rebuilt.SeedPrevious(warm);
+
+        Assert.InRange(rebuilt.GetBars(TimeSpan.FromSeconds(0.6d)).Max(), 0.55f, 0.7f);
+    }
+
+    [Fact]
+    public void SeedFrom_АтакаИСпад_КадрПереносится()
+    {
+        var audio = Tone(TimeSpan.FromSeconds(0.5), 1000d);
+        var warm = CreateSource(audio);
+        warm.GetBars(TimeSpan.FromSeconds(0.1d));
+        warm.GetBars(TimeSpan.FromSeconds(0.6d));
+
+        // Коэффициенты сглаживания описывают следующий кадр, а не текущий, поэтому правка
+        // любого из них не должна пересчитывать показанное.
+        var rebuilt = new SpectrumFrameSource(
+            audio,
+            SpectrumSettings.Default with { Attack = 0.9f, Release = 0.6f },
+            barCount: 64);
+
+        rebuilt.SeedFrom(warm);
+
+        Assert.InRange(rebuilt.GetBars(TimeSpan.FromSeconds(0.6d)).Max(), 0.75f, 0.85f);
+    }
+
+    [Fact]
+    public void SeedFrom_ДругоеЧислоПолос_КадрНеПереносится()
+    {
+        // Перенос между конвейерами с разным числом полос не должен ломать расчёт: при
+        // несовпадении длины сглаживание начинается заново, кадр берётся как есть.
+        var rebuilt = new SpectrumFrameSource(
+            Tone(TimeSpan.FromSeconds(1), 440d),
+            SpectrumSettings.Default with { AnalysisBandCount = 128 },
+            barCount: 64);
+
+        rebuilt.SeedFrom(CreateSource(Tone(TimeSpan.FromSeconds(1), 1000d)));
+        var values = rebuilt.GetBars(TimeSpan.FromSeconds(0.5d));
+
+        Assert.Equal(64, values.Length);
+        Assert.InRange(values.Max(), 0.95f, 1f);
+    }
+
     [Theory]
     [InlineData(1d, 30, 30)]
     [InlineData(1d, 60, 60)]

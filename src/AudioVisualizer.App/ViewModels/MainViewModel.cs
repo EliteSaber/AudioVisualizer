@@ -487,10 +487,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         if (_audio is not null)
         {
-            _frames = new SpectrumFrameSource(_audio, settings.Spectrum, BarCount(settings));
+            // Состояние переносится в новый источник: сглаживание, а если наполнение кадра не
+            // изменилось - и сам кадр. Без переноса столбики сдвинулись бы на шаг
+            // сглаживания при каждой правке, а правки оформления двигали бы их вообще.
+            var rebuilt = new SpectrumFrameSource(_audio, settings.Spectrum, BarCount(settings));
+
+            if (_frames is not null)
+            {
+                rebuilt.SeedFrom(_frames);
+            }
+
+            _frames = rebuilt;
         }
 
-        UpdatePreview();
+        // Позиция берётся у плеера, а не по умолчанию: кадр без позиции рисует начало
+        // трека, и столбики возвращались бы к нему на каждое движение ползунка настроек.
+        UpdatePreview(_player.Position);
     }
 
     /// <summary>

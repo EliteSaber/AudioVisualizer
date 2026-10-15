@@ -37,4 +37,20 @@ public sealed class SpectrumSmoother
     }
 
     public void Reset() => _previous = null;
+
+    /// <summary>
+    /// Переносит предыдущий кадр из другого сглаживателя. Нужен при пересборке конвейера:
+    /// новый сглаживатель без переноса отдал бы первый кадр как есть, и столбики дёрнулись бы.
+    /// </summary>
+    /// <remarks>
+    /// Копия, а не ссылка: старый сглаживатель после переноса больше не нужен, но делить с ним
+    /// массив нельзя. Длина при переносе не проверяется - <see cref="Smooth"/> при другой длине
+    /// и так начинает заново.
+    /// </remarks>
+    public void SeedPrevious(SpectrumSmoother other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+
+        _previous = other._previous?.ToArray();
+    }
 }

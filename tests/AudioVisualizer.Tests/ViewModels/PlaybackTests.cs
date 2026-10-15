@@ -7,12 +7,62 @@ namespace AudioVisualizer.Tests.ViewModels;
 
 public class PlaybackTests
 {
+    /// <summary>
+    /// Высота столбика тона: полоса 1 кГц при амплитуде 0,5 упирается в верх диапазона,
+    /// а тишина даёт ровно ноль. Сравнивать точные значения нельзя: правка настроек
+    /// пересоздаёт конвейер, а первый кадр после неё сглаживатель отдаёт как есть.
+    /// </summary>
+    private const float LoudBar = 0.5f;
+
+    /// <summary>
+    /// Порог видимого столбика на месте тонка, который уже закончился: сглаживание держит
+    /// хвост ещё пару кадров, и он должен остаться после правки настроек.
+    /// </summary>
+    private const float TailBar = 0.25f;
+
     private static readonly TemporaryAudioFile SharedSine = new(CreateSineWav(), extension: ".wav");
+
+    /// <summary>
+    /// Половина секунды тишины, потом тон. Ровный синус годится не везде: в нём спектр
+    /// одинаков в любой момент, и «кадр нарисован не с того места» на нём не увидеть.
+    /// </summary>
+    private static readonly TemporaryAudioFile SharedLateTone = new(CreateLateToneWav(), extension: ".wav");
+
+    /// <summary>Половина секунды тона, потом тишина: на хвосте виден вклад сглаживания.</summary>
+    private static readonly TemporaryAudioFile SharedEarlyTone = new(CreateEarlyToneWav(), extension: ".wav");
 
     private static byte[] CreateSineWav()
     {
         var samples = new float[44100];
         for (var i = 0; i < samples.Length; i++)
+        {
+            samples[i] = 0.5f * MathF.Sin(2f * MathF.PI * 1000f * i / 44100);
+        }
+
+        using var stream = new MemoryStream();
+        WavCodec.WritePcm16(stream, samples, 44100);
+
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateLateToneWav()
+    {
+        var samples = new float[44100];
+        for (var i = 22050; i < samples.Length; i++)
+        {
+            samples[i] = 0.5f * MathF.Sin(2f * MathF.PI * 1000f * i / 44100);
+        }
+
+        using var stream = new MemoryStream();
+        WavCodec.WritePcm16(stream, samples, 44100);
+
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateEarlyToneWav()
+    {
+        var samples = new float[44100];
+        for (var i = 0; i < 22050; i++)
         {
             samples[i] = 0.5f * MathF.Sin(2f * MathF.PI * 1000f * i / 44100);
         }
@@ -393,6 +443,180 @@ public class PlaybackTests
             viewModel.TogglePlayCommand.Execute(null);
 
             Assert.True(viewModel.IsPlaying);
+        }
+    }
+
+    [Fact]
+    public async Task ИзменениеНастроек_КадрОстаётсяНаТекущейПозиции()
+    {
+        var (viewModel, _, directory) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedLateTone.Path);
+
+            // Предусловие: в начале файла тишина, поэтому «кадр уехал в начало» видно сразу.
+            Assert.DoesNotContain(viewModel.Snapshot.Values, value => value > LoudBar);
+
+            viewModel.EndScrub(0.75d);
+            viewModel.Settings.BarWidth = 40;
+
+            Assert.Contains(viewModel.Snapshot.Values, value => value > LoudBar);
+        }
+    }
+
+    [Fact]
+    public async Task СтопПотомИзменениеНастроек_КадрОстаётсяВНачале()
+    {
+        var (viewModel, _, directory) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedLateTone.Path);
+            viewModel.EndScrub(0.75d);
+
+            viewModel.StopPlaybackCommand.Execute(null);
+            viewModel.Settings.BarWidth = 40;
+
+            // Момент для кадра берётся у плеера, а не запоминается: после стопа он в начале.
+            Assert.DoesNotContain(viewModel.Snapshot.Values, value => value > LoudBar);
+        }
+    }
+
+[Fact]
+    public async Task ПравкаЦвета_НеСдвигаетСтолбики()
+    {
+        var (viewModel, _, directory) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedEarlyTone.Path);
+            viewModel.EndScrub(0.6d);
+            var onScreen = viewModel.Snapshot.Values;
+
+            // Правки идут цепочкой: каждая постройка источника берёт кадр у предыдущей,
+            // и уже со второй спектр пересчитывался заново.
+            viewModel.Settings.BarFillColor = new RgbaColor(10, 200, 90);
+            Assert.Equal(onScreen, viewModel.Snapshot.Values);
+
+            viewModel.Settings.BackgroundColor = new RgbaColor(1, 2, 3);
+            Assert.Equal(onScreen, viewModel.Snapshot.Values);
+
+            viewModel.Settings.CenterLineColor = new RgbaColor(4, 5, 6, 200);
+            Assert.Equal(onScreen, viewModel.Snapshot.Values);
+
+            viewModel.Settings.BarSecondaryColor = new RgbaColor(200, 10, 90);
+            Assert.Equal(onScreen, viewModel.Snapshot.Values);
+
+            viewModel.Settings.BarBorderColor = new RgbaColor(90, 90, 200, 128);
+            Assert.Equal(onScreen, viewModel.Snapshot.Values);
+        }
+    }
+
+    [Fact]
+    public async Task ПравкаЦвета_ПриВоспроизведении_НеСдвигаетСтолбики()
+    {
+        var (viewModel, player, directory) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedEarlyTone.Path);
+            viewModel.TogglePlayCommand.Execute(null);
+            player.AdvanceTo(TimeSpan.FromSeconds(0.6d));
+            viewModel.UpdatePlayback();
+            var onScreen = viewModel.Snapshot.Values;
+
+            // Между правками позиция уехала вперёд: превью показывает то, что на экране,
+            // а момент догонит ближайший тик.
+            viewModel.Settings.BarFillColor = new RgbaColor(10, 200, 90);
+            player.AdvanceTo(TimeSpan.FromSeconds(0.7d));
+            viewModel.Settings.BackgroundColor = new RgbaColor(1, 2, 3);
+            player.AdvanceTo(TimeSpan.FromSeconds(0.8d));
+            viewModel.Settings.CenterLineColor = new RgbaColor(4, 5, 6, 200);
+
+            Assert.Equal(onScreen, viewModel.Snapshot.Values);
+        }
+    }
+
+    [Fact]
+    public async Task ПравкаШириныСтолбика_НеДвигаетСпектр()
+    {
+        var (viewModel, _, directory) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedEarlyTone.Path);
+
+            // Тон кончился на 0,5 с, но сглаживание держит хвост около 0,8.
+            viewModel.EndScrub(0.6d);
+            var before = viewModel.Snapshot.Values;
+
+            // Число столбиков меняется, наполнение то же: спектр не пересчитывается, поэтому
+            // высота остаётся хвостом. Пересчёт сдвинул бы её ещё на шаг сглаживания.
+            viewModel.Settings.BarWidth = 40;
+
+            Assert.NotEqual(before.Length, viewModel.Snapshot.Values.Length);
+            Assert.Contains(viewModel.Snapshot.Values, value => value > 0.7f);
+        }
+    }
+
+    [Fact]
+    public async Task ПравкаСпада_НеСдвигаетСтолбики()
+    {
+        var (viewModel, _, directory) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedEarlyTone.Path);
+            viewModel.EndScrub(0.6d);
+            var onScreen = viewModel.Snapshot.Values;
+
+            // Атака и спад описывают следующий кадр, а не текущий: правка любого из них не
+            // должна пересчитывать показанное.
+            viewModel.Settings.Release = 0.6f;
+            Assert.Equal(onScreen, viewModel.Snapshot.Values);
+
+            viewModel.Settings.Attack = 0.9f;
+            Assert.Equal(onScreen, viewModel.Snapshot.Values);
+        }
+    }
+
+    [Fact]
+    public async Task ПовторныйКадрНаТойЖеПозиции_ПродолжаетДвигаться()
+    {
+        var (viewModel, player, directory) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedEarlyTone.Path);
+            viewModel.TogglePlayCommand.Execute(null);
+
+            // Позиция плеера прыгает по прочитанным блокам звука, а таймер бьёт чаще: между
+            // прыжками кадров много с одним моментом, и они обязаны двигать картинку.
+            player.AdvanceTo(TimeSpan.FromSeconds(0.6d));
+            viewModel.UpdatePlayback();
+            var first = viewModel.Snapshot.Values;
+
+            viewModel.UpdatePlayback();
+            var second = viewModel.Snapshot.Values;
+
+            Assert.Contains(first, value => value > TailBar);
+            Assert.True(
+                second.Max() < first.Max(),
+                "Повторный кадр на том же моменте должен вести столбики к спектру дальше.");
+        }
+    }
+
+    [Fact]
+    public async Task ПравкаНастроек_НеОбнуляетСглаживание()
+    {
+        var (viewModel, _, directory) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedEarlyTone.Path);
+
+            // Тон кончился на 0,5 с, но сглаживание держит хвост: столбики ещё ненулевые.
+            viewModel.EndScrub(0.6d);
+            Assert.Contains(viewModel.Snapshot.Values, value => value > TailBar);
+
+            // Усиление входит в спектр, поэтому кадр пересчитывается - но сглаживание должно
+            // продолжиться с хвоста, а не начаться заново сырым нулём.
+            viewModel.Settings.GainDb = 6d;
+
+            Assert.Contains(viewModel.Snapshot.Values, value => value > TailBar);
         }
     }
 }

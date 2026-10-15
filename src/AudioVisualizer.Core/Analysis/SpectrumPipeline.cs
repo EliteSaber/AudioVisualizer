@@ -42,4 +42,15 @@ public sealed class SpectrumPipeline
         => SpectrumResampler.Resample(Analyze(samples, startIndex), barCount);
 
     public void Reset() => _smoother.Reset();
+
+    /// <summary>
+    /// Переносит предыдущий кадр из другого конвейера. Вызывается при пересборке источника
+    /// под новые настройки: конвейер новый, а сглаживание должно продолжиться с того же кадра.
+    /// </summary>
+    public void SeedPrevious(SpectrumPipeline other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+
+        _smoother.SeedPrevious(other._smoother);
+    }
 }

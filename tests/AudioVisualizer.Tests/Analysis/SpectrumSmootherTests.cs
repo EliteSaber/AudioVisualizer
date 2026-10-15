@@ -88,4 +88,48 @@ public class SpectrumSmootherTests
 
         Assert.Equal([0.4f], afterReset);
     }
+
+    [Fact]
+    public void SeedPrevious_КадрПродолжаетсяОтПрежнего()
+    {
+        var warm = new SpectrumSmoother(attack: 0.5f, release: 0.25f);
+        warm.Smooth([1f]);
+
+        // Пересобранный сглаживатель без переноса взял бы первый кадр как есть.
+        var rebuilt = new SpectrumSmoother(attack: 0.5f, release: 0.25f);
+        rebuilt.SeedPrevious(warm);
+
+        var frame = new[] { 0f };
+        rebuilt.Smooth(frame);
+
+        Assert.Equal(0.75f, frame[0], 5);
+    }
+
+    [Fact]
+    public void SeedPrevious_ПустоеСостояние_ОстаётсяПервыйКадрКакЕсть()
+    {
+        var fresh = new SpectrumSmoother(attack: 0.5f, release: 0.25f);
+        var rebuilt = new SpectrumSmoother(attack: 0.5f, release: 0.25f);
+
+        rebuilt.SeedPrevious(fresh);
+        var frame = new[] { 0.3f };
+        rebuilt.Smooth(frame);
+
+        Assert.Equal([0.3f], frame);
+    }
+
+    [Fact]
+    public void SeedPrevious_ДругаяДлинаКадра_НачинаетЗаново()
+    {
+        var warm = new SpectrumSmoother(attack: 0.5f, release: 0.25f);
+        warm.Smooth([1f, 1f, 1f]);
+
+        var rebuilt = new SpectrumSmoother(attack: 0.5f, release: 0.25f);
+        rebuilt.SeedPrevious(warm);
+
+        var frame = new[] { 0f };
+        rebuilt.Smooth(frame);
+
+        Assert.Equal([0f], frame);
+    }
 }

@@ -7,8 +7,8 @@ using AudioVisualizer.Core.Settings;
 namespace AudioVisualizer.App.Controls;
 
 /// <summary>
-/// Выбор цвета: образец, значение в hex и всплывающая панель каналов. Своя реализация вместо
-/// диалога WinForms, чтобы приложение осталось чистым WPF.
+/// Выбор цвета: образец, значение в hex и всплывающая панель — палитра HSV с ползунками
+/// каналов. Своя реализация вместо диалога WinForms, чтобы приложение осталось чистым WPF.
 /// </summary>
 public partial class ColorPicker : UserControl
 {
@@ -26,6 +26,8 @@ public partial class ColorPicker : UserControl
 
         ColorPopup.PlacementTarget = Swatch;
         ColorPopup.Opened += OnPopupOpened;
+        HueField.Picked += OnFieldPicked;
+        HueBar.Picked += OnStripPicked;
         ShowColor(Color);
     }
 
@@ -54,11 +56,41 @@ public partial class ColorPicker : UserControl
             BlueSlider.Value = color.B;
             AlphaSlider.Value = color.A;
             TransparentCheckBox.IsChecked = color.A == 0;
+
+            // Палитра показывает текущий цвет, но выбора не сообщает: поднятое событие вернуло
+            // бы тот же цвет обратно и сдвинуло его на байт при каждой правке.
+            var hsv = HsvColor.FromRgba(color);
+
+            HueField.Hue = hsv.Hue;
+            HueField.Saturation = hsv.Saturation;
+            HueField.Value = hsv.Value;
+            HueBar.Hue = hsv.Hue;
         }
         finally
         {
             _updating = false;
         }
+    }
+
+    private void OnFieldPicked(object? sender, EventArgs args) => ApplyPickedColor();
+
+    private void OnStripPicked(object? sender, EventArgs args)
+    {
+        // Тон у поля и у полосы один: выбрали тон — поле должно перерисоваться под него,
+        // не теряя ни насыщенность, ни яркость.
+        HueField.Hue = HueBar.Hue;
+
+        ApplyPickedColor();
+    }
+
+    /// <summary>
+    /// Цвет с палитры собирается из текущего тона, насыщенности и яркости. Альфа берётся из
+    /// прежнего цвета: у полупрозрачной центральной линии и прозрачной границы столбика она
+    /// своя, и палитра её бы стёрла.
+    /// </summary>
+    private void ApplyPickedColor()
+    {
+        Color = new HsvColor(HueField.Hue, HueField.Saturation, HueField.Value).ToRgba(Color.A);
     }
 
     private void OnChannelChanged(object sender, RoutedPropertyChangedEventArgs<double> args)

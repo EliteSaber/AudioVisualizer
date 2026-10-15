@@ -30,7 +30,12 @@ internal static class ColorBrushes
     /// конец градиента - края полосы, поэтому след одинаково гаснет у столбиков разной высоты.
     /// </summary>
     /// <param name="transparentAtEnd">Куда уходит прозрачность: в начало полосы или в конец.</param>
-    public static LinearGradientBrush Fade(RgbaColor color, bool transparentAtEnd)
+    /// <param name="opaqueAt">
+    /// Доля полосы, на которой цвет становится непрозрачным. Дальше он непрозрачный до конца:
+    /// участок ниже этой точки виден только по бокам от купола столбика, и полупрозрачный там
+    /// читался бы просветом.
+    /// </param>
+    public static LinearGradientBrush Fade(RgbaColor color, bool transparentAtEnd, double opaqueAt)
     {
         var opaque = ToColor(color);
 
@@ -48,6 +53,7 @@ internal static class ColorBrushes
         };
 
         brush.GradientStops.Add(new GradientStop(transparentAtEnd ? opaque : transparent, 0d));
+        brush.GradientStops.Add(new GradientStop(opaque, Math.Clamp(opaqueAt, 0d, 1d)));
         brush.GradientStops.Add(new GradientStop(transparentAtEnd ? transparent : opaque, 1d));
         brush.Freeze();
 

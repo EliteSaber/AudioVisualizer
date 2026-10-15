@@ -55,6 +55,14 @@ public class SettingsNormalizerTests
     }
 
     [Fact]
+    public void Normalize_ПлотностьСледа_Ограничивается()
+    {
+        Assert.Equal(0.8d, SettingsNormalizer.NormalizeBars(new BarSettings()).TrailDensity);
+        Assert.Equal(0d, SettingsNormalizer.NormalizeBars(new BarSettings { TrailDensity = -0.5d }).TrailDensity);
+        Assert.Equal(1d, SettingsNormalizer.NormalizeBars(new BarSettings { TrailDensity = 3d }).TrailDensity);
+    }
+
+[Fact]
     public void Normalize_НеизвестныйВидСкругления_ЗаменяетсяНаУмолчание()
     {
         var bars = SettingsNormalizer.NormalizeBars(new BarSettings { CornerStyle = (CornerStyle)99 });

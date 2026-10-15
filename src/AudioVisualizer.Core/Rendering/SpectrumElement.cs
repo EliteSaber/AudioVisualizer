@@ -85,12 +85,16 @@ public class SpectrumElement : FrameworkElement
     }
 
     /// <summary>
-    /// Призрак прежней высоты столбика: полоса от вершины, где столбик был, до его нынешней.
-    /// У края полосы берётся цвет заливки столбика на этой высоте, поэтому стыка не видно.
+    /// Призрак прежней высоты столбика. Рисуется целиком, от края зазора до прежней вершины,
+    /// и закрывается текущим столбиком, который рисуется поверх.
     /// </summary>
     /// <remarks>
-    /// Прямоугольник без скругления и без границы: края у полосы уходят в прозрачность,
-    /// и скруглять или обводить там нечего. Поверх полосы всё равно рисуется сам столбик.
+    /// Раньше здесь была полоса между прежней и нынешней вершинами, и это была неверная форма:
+    /// она обрывалась ровно на вершине столбика, а купол ниже вершины расходится в стороны,
+    /// и между полосой и столбиком оставался пустой фон. Призрак же занимает и эту область,
+    /// поэтому след выглядит продолжением столбика, а не накладкой сверху. Форма и радиус
+    /// берутся те же, что у столбика, - это тот же столбик, только прежней высоты. Пером
+    /// призрак не обводится: у него по краям прозрачность, обводить нечего.
     /// </remarks>
     private static void DrawTrail(
         DrawingContext drawingContext,
@@ -104,11 +108,11 @@ public class SpectrumElement : FrameworkElement
         var current = upper ? layout.GetUpperBar(index, value) : layout.GetLowerBar(index, value);
         var past = upper ? layout.GetUpperBar(index, ghost) : layout.GetLowerBar(index, ghost);
 
-        var band = upper
-            ? new Rect(current.X, past.Y, current.Width, current.Y - past.Y)
-            : new Rect(current.X, current.Bottom, current.Width, past.Bottom - current.Bottom);
+        // Призрак, не отличающийся от столбика, виден не будет: он целиком под ним. Порог в
+        // пикселях, а не в долях высоты, иначе у полки над столбиком след был бы незаметен.
+        var density = snapshot.Bars.TrailDensity;
 
-        if (band.Width <= 0d || band.Height < BarTrail.MinimumVisibleHeight)
+        if (density <= 0d || past.Width <= 0d || ((ghost - value) * layout.MaxHalfHeight) < BarTrail.MinimumVisibleHeight)
         {
             return;
         }
@@ -116,10 +120,45 @@ public class SpectrumElement : FrameworkElement
         var span = FillSpan(snapshot, layout, upper);
         var seam = upper ? current.Y : current.Bottom;
 
+        // Непрозрачность достигается на вершине столбика, а не у самого края зазора: ниже
+        // вершины след виден по бокам от купола, и полупрозрачный там читался бы просветом.
+        var opaqueAt = (seam - past.Y) / past.Height;
+        var color = ColorBrushes.At(span.From, span.To, span.StartY, span.EndY, seam).Faded(density);
+
         drawingContext.DrawGeometry(
-            ColorBrushes.Fade(ColorBrushes.At(span.From, span.To, span.StartY, span.EndY, seam), transparentAtEnd: !upper),
+            ColorBrushes.Fade(color, transparentAtEnd: !upper, opaqueAt),
             null,
-            BarGeometry.Rect(band));
+            BuildGhost(past, current, snapshot, upper));
+    }
+
+    /// <summary>
+    /// Геометрия призрака: тот же столбик, только прежней высоты.
+    /// </summary>
+    /// <remarks>
+    /// Из столбика вычитается его собственный контур, но только когда заливка столбика
+    /// полупрозрачна: иначе след просвечивал бы сквозь него и подкрашивал его. Считать эту
+    /// разность всегда нельзя - булевы операции над путями с дугами дороже, чем заливка той
+    /// площади, которая под столбиком и так не видна.
+    /// </remarks>
+    private static Geometry BuildGhost(Rect ghost, Rect bar, SpectrumSnapshot snapshot, bool upper)
+    {
+        var settings = snapshot.Bars;
+        var colors = snapshot.Colors;
+        var geometry = BarGeometry.Build(ghost, settings.CornerRadius, settings.CornerStyle, outerCornersAtTop: upper);
+
+        if (colors.BarFill.A >= 255 && colors.BarFillSecondary.A >= 255)
+        {
+            return geometry;
+        }
+
+        var difference = new CombinedGeometry(
+            GeometryCombineMode.Exclude,
+            geometry,
+            BarGeometry.Build(bar, settings.CornerRadius, settings.CornerStyle, outerCornersAtTop: upper));
+
+        difference.Freeze();
+
+        return difference;
     }
 
     private static void DrawBar(DrawingContext drawingContext, Rect rect, BarSettings settings, Pen? pen, Brush fill, bool outerCornersAtTop)

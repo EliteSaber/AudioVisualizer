@@ -8,8 +8,10 @@ namespace AudioVisualizer.Tests.Rendering;
 [Collection(WpfUi.Name)]
 public class SpectrumElementTests
 {
-    private const double FrameWidth = 800d;
+private const double FrameWidth = 800d;
     private const double FrameHeight = 450d;
+
+    private static readonly ColorSettings DefaultColors = new();
 
     private static TestElement CreateElement(SpectrumSnapshot? snapshot)
     {
@@ -54,30 +56,49 @@ private static SpectrumSnapshot Snapshot(
         return visual.Drawing?.Children.OfType<GeometryDrawing>().ToArray() ?? [];
     }
 
-/// <summary>Столбики рисуются геометрией, фон и центральная линия - прямоугольниками.</summary>
+/// <summary>Столбики: всё, что не след и не подложка кадра.</summary>
     private static GeometryDrawing[] BarsOf(TestElement element)
-        => DrawingsOf(element).Where(drawing => drawing.Geometry is not RectangleGeometry).ToArray();
+        => DrawingsOf(element)
+            .Where(drawing => !IsTrail(drawing) && !IsChrome(drawing))
+            .ToArray();
+
+    /// <summary>Полосы следов: у них градиент по габаритам самой полосы.</summary>
+    private static GeometryDrawing[] TrailsOf(TestElement element)
+        => DrawingsOf(element).Where(IsTrail).ToArray();
 
     /// <summary>
-    /// Полосы следа: у них градиент по габаритам самой полосы, а заливка столбиков идёт
-    /// градиентом по координатам кадра. На разнице в режиме отображения и держится выбор:
-    /// при однотонной заливке полосы иначе и не отличить от столбиков.
+    /// След отличается заливкой: градиент по габаритам полосы, тогда как столбик заливается
+    /// либо сплошным цветом, либо градиентом по координатам кадра.
     /// </summary>
-    private static GeometryDrawing[] TrailsOf(TestElement element)
-        => DrawingsOf(element)
-            .Where(drawing => drawing.Brush is LinearGradientBrush { MappingMode: BrushMappingMode.RelativeToBoundingBox })
-            .ToArray();
+    private static bool IsTrail(GeometryDrawing drawing)
+        => drawing.Brush is LinearGradientBrush { MappingMode: BrushMappingMode.RelativeToBoundingBox };
+
+    /// <summary>
+    /// Фон кадра и центральная линия заливаются сплошным цветом из настроек, поэтому по нему
+    /// и отсеиваются: по типу геометрии это не сделать, полоса следа строится той же формой,
+    /// что и столбик, и при прямых углах это один и тот же прямоугольник.
+    /// </summary>
+    private static bool IsChrome(GeometryDrawing drawing)
+        => drawing.Brush is SolidColorBrush brush
+            && (brush.Color == ColorOf(DefaultColors.Background) || brush.Color == ColorOf(DefaultColors.CenterLine));
 
     private static TestElement CreateTrailElement()
         => CreateElement(Snapshot([1f], bars => bars with { TrailDecayMs = 500d }));
 
     /// <summary>Два кадра: высокий столбик, затем вдвое ниже. Возвращает элемент после второго.</summary>
-    private static TestElement FallFrame()
+    private static TestElement FallFrame(
+        int cornerRadius = 6,
+        CornerStyle cornerStyle = CornerStyle.OuterRounded,
+        ColorSettings? colors = null,
+        double? density = null)
     {
-        var element = CreateTrailElement();
+        BarSettings Trail(BarSettings bars)
+            => bars with { TrailDecayMs = 500d, CornerRadius = cornerRadius, CornerStyle = cornerStyle, TrailDensity = density ?? bars.TrailDensity };
+
+        var element = CreateElement(Snapshot([1f], Trail, colors));
         DrawingsOf(element);
 
-        element.Snapshot = Snapshot([0.5f], bars => bars with { TrailDecayMs = 500d });
+        element.Snapshot = Snapshot([0.5f], Trail, colors);
 
         return element;
     }
@@ -233,6 +254,93 @@ private static SpectrumSnapshot Snapshot(
     });
 
     [Fact]
+    public void Призрак_ПовторяетФормуСтолбика() => Sta.Run(() =>
+    {
+        // Радиус 40 при ширине столбика 20 схлопывается до 10 - так же, как у самого столбика.
+        var trails = TrailsOf(FallFrame(cornerRadius: 40));
+
+        Assert.Equal(2, trails.Length);
+
+        var upper = trails[0].Geometry.Bounds;
+        var lower = trails[1].Geometry.Bounds;
+
+        // Дальний край призрака скруглён, как внешний край столбика, а у края зазора углы
+        // прямые: призрак устроен ровно как столбик, только прежней высоты.
+        Assert.False(trails[0].Geometry.FillContains(new Point(upper.Left + 2d, upper.Top + 2d)));
+        Assert.True(trails[0].Geometry.FillContains(new Point(upper.Left + (upper.Width / 2d), upper.Top + 2d)));
+        Assert.True(trails[0].Geometry.FillContains(new Point(upper.Left + 2d, upper.Bottom - 2d)));
+
+        // Нижняя половина зеркально.
+        Assert.False(trails[1].Geometry.FillContains(new Point(lower.Left + 2d, lower.Bottom - 2d)));
+        Assert.True(trails[1].Geometry.FillContains(new Point(lower.Left + (lower.Width / 2d), lower.Bottom - 2d)));
+        Assert.True(trails[1].Geometry.FillContains(new Point(lower.Left + 2d, lower.Top + 2d)));
+    });
+
+    /// <summary>
+    /// Главное свойство следа: призрак заходит в область, которую столбик уже не закрывает.
+    /// Раньше он был полосой между прежней и нынешней вершинами, обрывался на вершине столбика,
+    /// и по бокам от купола оставался пустой фон - те самые промежутки на стыке.
+    /// </summary>
+    [Fact]
+    public void Призрак_ЗакрываетПросветУКупола() => Sta.Run(() =>
+    {
+        var element = FallFrame(cornerRadius: 40);
+        var bars = BarsOf(element);
+        var trails = TrailsOf(element);
+
+        Assert.Equal(2, bars.Length);
+        Assert.Equal(2, trails.Length);
+
+        // Радиус 10: на расстоянии 3 от вершины столбик срезан на 10 - sqrt(100 - 49) = 2.86,
+        // а призрак на этой высоте ещё прямой: его углы только у самого дальнего края.
+        const double fromTop = 3d;
+        const double nearEdge = 2d;
+
+        var upperBar = bars[0].Geometry.Bounds;
+        var upperGhost = trails[0].Geometry.Bounds;
+
+        Assert.Equal(upperBar.Left, upperGhost.Left, 5);
+        Assert.Equal(upperBar.Width, upperGhost.Width, 5);
+
+        Assert.False(bars[0].Geometry.FillContains(new Point(upperBar.Left + nearEdge, upperBar.Top + fromTop)));
+        Assert.True(trails[0].Geometry.FillContains(new Point(upperGhost.Left + nearEdge, upperBar.Top + fromTop)));
+
+        var lowerBar = bars[1].Geometry.Bounds;
+        var lowerGhost = trails[1].Geometry.Bounds;
+
+        Assert.False(bars[1].Geometry.FillContains(new Point(lowerBar.Left + nearEdge, lowerBar.Bottom - fromTop)));
+        Assert.True(trails[1].Geometry.FillContains(new Point(lowerGhost.Left + nearEdge, lowerBar.Bottom - fromTop)));
+    });
+
+    [Fact]
+    public void Призрак_УСкруглённогоСтолбикаСкруглёнИУЗазора() => Sta.Run(() =>
+    {
+        // У вида углов «скруглённые» скруглён и край у центральной линии, поэтому у призрака
+        // срезаны углы с обеих сторон - в отличие от «скруглённых снаружи».
+        var trails = TrailsOf(FallFrame(cornerRadius: 40, cornerStyle: CornerStyle.Rounded));
+
+        Assert.Equal(2, trails.Length);
+
+        var upper = trails[0].Geometry.Bounds;
+
+        Assert.False(trails[0].Geometry.FillContains(new Point(upper.Left + 2d, upper.Bottom - 2d)));
+        Assert.True(trails[0].Geometry.FillContains(new Point(upper.Left + (upper.Width / 2d), upper.Bottom - 2d)));
+    });
+
+    [Fact]
+    public void ПолосаСледа_ПриПрямыхУглах_НеСкругляется() => Sta.Run(() =>
+    {
+        var trails = TrailsOf(FallFrame(cornerRadius: 40, cornerStyle: CornerStyle.Rectangular));
+
+        Assert.Equal(2, trails.Length);
+
+        var upper = trails[0].Geometry.Bounds;
+
+        // Прямоугольный столбик - прямоугольный след, скругление не навязывается всем подряд.
+        Assert.True(trails[0].Geometry.FillContains(new Point(upper.Left + 2d, upper.Top + 2d)));
+    });
+
+    [Fact]
     public void СледВыключен_ПолосНеРисуется() => Sta.Run(() =>
     {
         var element = CreateElement(Snapshot([1f]));
@@ -244,17 +352,97 @@ private static SpectrumSnapshot Snapshot(
     });
 
     [Fact]
-    public void Убывание_ОставляетПолосуОтПрежнейВысоты() => Sta.Run(() =>
+    public void Убывание_ПризракДоходитДоКраяЗазора() => Sta.Run(() =>
     {
         var trails = TrailsOf(FallFrame());
 
         // Половина сверху и половина снизу. Отступ 20, центр 225, половина зазора 2, высота
-        // при единице 203: призрак 0.967 - это вершина 26.7 вместо нынешних 121.5.
+        // при единице 203: призрак 0.967 тянется от вершины 26.7 до самого края зазора, а не
+        // обрывается на нынешней вершине столбика 121.5.
         Assert.Equal(2, trails.Length);
-        Assert.Equal(94.8d, trails[0].Geometry.Bounds.Height, 1);
+        Assert.Equal(196.3d, trails[0].Geometry.Bounds.Height, 1);
         Assert.Equal(26.7d, trails[0].Geometry.Bounds.Top, 1);
+        Assert.Equal(FrameHeight / 2d - 2d, trails[0].Geometry.Bounds.Bottom, 1);
+        Assert.Equal(FrameHeight / 2d + 2d, trails[1].Geometry.Bounds.Top, 1);
         Assert.Equal(FrameHeight - 26.7d, trails[1].Geometry.Bounds.Bottom, 1);
         Assert.Equal(trails[0].Geometry.Bounds.Width, trails[1].Geometry.Bounds.Width, 5);
+    });
+
+    /// <summary>
+    /// Непрозрачность должна достигаться на вершине столбика, а не у края зазора: область ниже
+    /// вершины видна только по бокам от купола, и полупрозрачная она читалась бы просветом.
+    /// </summary>
+    [Fact]
+    public void Затухание_ДостигаетНепрозрачностиУВершиныСтолбика() => Sta.Run(() =>
+    {
+        var trails = TrailsOf(FallFrame());
+
+        Assert.Equal(2, trails.Length);
+
+        var upperGhost = trails[0].Geometry.Bounds;
+        var upper = (LinearGradientBrush)trails[0].Brush!;
+
+        // Призрак 26.7..223, вершина столбика 121.5: непрозрачность на (121.5 - 26.7) / 196.3.
+        // Сама непрозрачность - 204, а не 255: след по умолчанию плотностью 0.8, иначе у вершины
+        // он совпал бы со столбиком по цвету и границы не было бы видно.
+        Assert.Equal(3, upper.GradientStops.Count);
+        Assert.Equal(0, upper.GradientStops[0].Color.A);
+        Assert.Equal(204, upper.GradientStops[1].Color.A);
+        Assert.Equal(0.483d, upper.GradientStops[1].Offset, 3);
+        Assert.Equal(204, upper.GradientStops[2].Color.A);
+        Assert.Equal(upperGhost.Height, trails[0].Geometry.Bounds.Height, 5);
+
+        // Нижняя половина: непрозрачность от края зазора и до вершины столбика (328.5 - 227),
+        // то есть на доле 0.517, а дальше прозрачность у прежней вершины.
+        var lower = (LinearGradientBrush)trails[1].Brush!;
+
+        Assert.Equal(204, lower.GradientStops[0].Color.A);
+        Assert.Equal(204, lower.GradientStops[1].Color.A);
+        Assert.Equal(0.517d, lower.GradientStops[1].Offset, 3);
+        Assert.Equal(0, lower.GradientStops[2].Color.A);
+    });
+
+    [Fact]
+    public void ПлотностьСледа_УмножаетПрозрачностьЦвета() => Sta.Run(() =>
+    {
+        var trails = TrailsOf(FallFrame(colors: new ColorSettings { BarFill = new RgbaColor(56, 132, 255, 128) }));
+
+        Assert.Equal(2, trails.Length);
+
+        // Столбик полупрозрачный, и след считается от его альфы: 128 * 0.8 = 102, а не снова 204.
+        Assert.Equal(102, ((LinearGradientBrush)trails[0].Brush!).GradientStops[1].Color.A);
+    });
+
+    [Fact]
+    public void НулеваяПлотностьСледа_ПризракНеРисуется() => Sta.Run(() =>
+    {
+        var trails = TrailsOf(FallFrame(density: 0d));
+
+        Assert.Empty(trails);
+    });
+
+    [Fact]
+    public void ПолупрозрачныйСтолбик_ПризракНеЛежитПодНим() => Sta.Run(() =>
+    {
+        var translucent = new ColorSettings { BarFill = new RgbaColor(56, 132, 255, 128) };
+
+        var element = FallFrame(cornerRadius: 40, colors: translucent);
+        var ghost = TrailsOf(element)[0].Geometry;
+        var bar = BarsOf(element)[0].Geometry;
+        var opaque = TrailsOf(FallFrame(cornerRadius: 40))[0].Geometry;
+
+        var left = ghost.Bounds.Left;
+        var barTop = 121.5d;
+
+        // Прозрачный столбик виден насквозь, поэтому его область из призрака вычитается:
+        // иначе след подкрашивал бы его своим цветом.
+        Assert.False(ghost.FillContains(new Point(left + 10d, barTop + 50d)));
+        Assert.True(opaque.FillContains(new Point(left + 10d, barTop + 50d)));
+
+        // А сами плечи у купола остаются: там след и нужен. При радиусе 10 столбик на трёх
+        // пикселях от вершины срезан на 2.86, а призрак на этой высоте ещё прямой.
+        Assert.False(bar.FillContains(new Point(left + 2d, barTop + 3d)));
+        Assert.True(ghost.FillContains(new Point(left + 2d, barTop + 3d)));
     });
 
     [Fact]
@@ -269,9 +457,10 @@ private static SpectrumSnapshot Snapshot(
         var trails = TrailsOf(element);
 
         // Сверху след уходит в прозрачность, снизу - в цвет столбика: у нижней половины
-        // наоборот, потому что полоса растёт от центра вниз.
+        // наоборот, потому что призрак растёт от центра вниз. Непрозрачность - своя,
+        // плотностью следа.
         Assert.Equal(0, ((LinearGradientBrush)trails[0].Brush!).GradientStops[0].Color.A);
-        Assert.Equal(255, ((LinearGradientBrush)trails[0].Brush!).GradientStops[^1].Color.A);
+        Assert.Equal(204, ((LinearGradientBrush)trails[0].Brush!).GradientStops[^1].Color.A);
         Assert.Equal(0, ((LinearGradientBrush)trails[1].Brush!).GradientStops[^1].Color.A);
 
         // Край у столбика берёт цвет заливки на этой высоте, поэтому стыка не видно.
@@ -321,4 +510,6 @@ private sealed class TestElement : SpectrumElement
 
     /// <summary>Цвет WPF в виде настройки: так его можно сравнить с <see cref="ColorSettings"/>.</summary>
     private static RgbaColor Near(Color color) => new(color.R, color.G, color.B, color.A);
+
+    private static Color ColorOf(RgbaColor color) => Color.FromArgb(color.A, color.R, color.G, color.B);
 }

@@ -10,6 +10,13 @@ public readonly record struct RgbaColor(byte R, byte G, byte B, byte A = 255)
 {
     public static RgbaColor Transparent => new(0, 0, 0, 0);
 
+    /// <summary>
+    /// Тот же цвет с уменьшенной прозрачностью: так след отличается от столбика, оставаясь его
+    /// цветом. Считается от своей альфы, а не от 255, поэтому полупрозрачный столбик и след
+    /// остаются соразмерными.
+    /// </summary>
+    public RgbaColor Faded(double factor) => this with { A = (byte)Math.Clamp(Math.Round(A * factor), 0d, 255d) };
+
     public static RgbaColor Parse(string text)
     {
         ArgumentNullException.ThrowIfNull(text);

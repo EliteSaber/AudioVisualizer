@@ -46,7 +46,7 @@ public class SettingsViewModelTests
         var source = SettingsNormalizer.Normalize(AppSettings.Default with
         {
             Spectrum = new SpectrumSettings { Gamma = 0.7f, GainDb = 4f },
-            Bars = new BarSettings { Width = 14, CornerRadius = 7, BorderWidth = 2.5d, TrailDecayMs = 240d },
+            Bars = new BarSettings { Width = 14, CornerRadius = 7, BorderWidth = 2.5d, TrailDecayMs = 240d, TrailDensity = 0.6d },
             Export = new ExportSettings { Width = 1280, Height = 720, FramesPerSecond = 30 }
         });
 

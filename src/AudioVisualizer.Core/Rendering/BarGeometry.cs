@@ -28,8 +28,8 @@ public static class BarGeometry
         return geometry;
     }
 
-    /// <summary>Прямой прямоугольник без скругления: полоса следа уходит в прозрачность, углы не видны.</summary>
-    public static Geometry Rect(Rect rect) => Freeze(new RectangleGeometry(rect));
+    /// <summary>Прямой прямоугольник без скругления.</summary>
+    private static RectangleGeometry Rect(Rect rect) => Freeze(new RectangleGeometry(rect));
 
     /// <summary>
     /// Столбик со скруглёнными только внешними углами: у центральной линии углы прямые,

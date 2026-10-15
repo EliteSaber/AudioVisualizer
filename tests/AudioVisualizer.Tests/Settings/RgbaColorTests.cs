@@ -65,4 +65,23 @@ public class RgbaColorTests
 
         Assert.Equal(new RgbaColor(0x11, 0x22, 0x33, 0x44), color);
     }
+
+    [Fact]
+    public void Faded_ГаситТолькоПрозрачность()
+    {
+        Assert.Equal(0, new RgbaColor(10, 20, 30, 255).Faded(0d).A);
+        Assert.Equal(204, new RgbaColor(10, 20, 30, 255).Faded(0.8d).A);
+        Assert.Equal(102, new RgbaColor(10, 20, 30, 128).Faded(0.8d).A);
+    }
+
+    [Fact]
+    public void Faded_БольшеЕдиницы_ОставляетЦветИ_ЗажимаетАльфу()
+    {
+        var faded = new RgbaColor(10, 20, 30, 255).Faded(4d);
+
+        Assert.Equal(255, faded.A);
+        Assert.Equal(10, faded.R);
+        Assert.Equal(20, faded.G);
+        Assert.Equal(30, faded.B);
+    }
 }

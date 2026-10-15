@@ -105,6 +105,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 [ObservableProperty] private int _barCenterGap;
     [ObservableProperty] private bool _barMirror;
     [ObservableProperty] private double _barTrailDecayMs;
+    [ObservableProperty] private double _barTrailDensity;
 
     [ObservableProperty] private int _fftSize;
     [ObservableProperty] private double _minFrequencyHz;
@@ -145,7 +146,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             Margin = BarMargin,
 CenterGap = BarCenterGap,
             Mirror = BarMirror,
-            TrailDecayMs = BarTrailDecayMs
+            TrailDecayMs = BarTrailDecayMs,
+            TrailDensity = BarTrailDensity
         },
         Spectrum = new SpectrumSettings
         {
@@ -198,6 +200,7 @@ CenterGap = BarCenterGap,
 BarCenterGap = settings.Bars.CenterGap;
             BarMirror = settings.Bars.Mirror;
             BarTrailDecayMs = settings.Bars.TrailDecayMs;
+            BarTrailDensity = settings.Bars.TrailDensity;
 
             FftSize = spectrum.FftSize;
             MinFrequencyHz = spectrum.MinFrequencyHz;

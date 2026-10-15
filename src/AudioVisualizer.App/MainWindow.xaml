@@ -271,6 +271,16 @@
                                             Value="{Binding Settings.BarTrailDecayMs, Mode=TwoWay}" />
                                 </controls:SettingRow>
 
+<!--
+                                    Плотность ниже единицы обязательна: при единице след у
+                                    вершины того же цвета, что и столбик, и границы между ними
+                                    не видно.
+                                -->
+                                <controls:SettingRow Label="{Binding Settings.BarTrailDensity, StringFormat={}Плотность следа: {0:0.00}}">
+                                    <Slider Minimum="0" Maximum="1" TickFrequency="0.05"
+                                            Value="{Binding Settings.BarTrailDensity, Mode=TwoWay}" />
+                                </controls:SettingRow>
+
                                 <controls:SettingRow Label="Зеркалить вниз">
                                     <CheckBox IsChecked="{Binding Settings.BarMirror, Mode=TwoWay}"
                                               Foreground="{StaticResource TextBrush}"

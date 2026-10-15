@@ -258,6 +258,19 @@
                                 <controls:SettingRow Label="{Binding Settings.BarCenterGap, StringFormat={}Зазор у центра: {0} px}">
                                     <Slider Minimum="0" Maximum="120" Value="{Binding Settings.BarCenterGap, Mode=TwoWay}" />
                                 </controls:SettingRow>
+
+<!--
+                                    След рисуется не в пикселях кадра, а по значениям, поэтому
+                                    задан временем: на экране и в ролике он живёт одинаково,
+                                    какой бы частоты кадров ни был ролик. Это не спад из
+                                    вкладки «Спектр и EQ»: спад замедляет уменьшение высоты,
+                                    а след оставляет призрак прежней.
+                                -->
+                                <controls:SettingRow Label="{Binding Settings.BarTrailDecayMs, StringFormat={}След: {0:0} мс}">
+                                    <Slider Minimum="0" Maximum="1500" TickFrequency="50" IsSnapToTickEnabled="True"
+                                            Value="{Binding Settings.BarTrailDecayMs, Mode=TwoWay}" />
+                                </controls:SettingRow>
+
                                 <controls:SettingRow Label="Зеркалить вниз">
                                     <CheckBox IsChecked="{Binding Settings.BarMirror, Mode=TwoWay}"
                                               Foreground="{StaticResource TextBrush}"

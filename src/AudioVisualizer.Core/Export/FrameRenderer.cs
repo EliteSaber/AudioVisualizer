@@ -23,8 +23,9 @@ public sealed class FrameRenderer
     private readonly int _stride;
     private readonly ColorSettings _colors;
     private readonly BarSettings _bars;
+    private readonly int _framesPerSecond;
 
-    public FrameRenderer(int width, int height, ColorSettings colors, BarSettings bars)
+    public FrameRenderer(int width, int height, ColorSettings colors, BarSettings bars, int framesPerSecond = 60)
     {
         ArgumentNullException.ThrowIfNull(colors);
         ArgumentNullException.ThrowIfNull(bars);
@@ -41,6 +42,7 @@ public sealed class FrameRenderer
 
         _colors = colors;
         _bars = bars;
+        _framesPerSecond = framesPerSecond;
 
         _element = new SpectrumElement { Width = width, Height = height };
         _element.Measure(new Size(width, height));
@@ -60,7 +62,7 @@ public sealed class FrameRenderer
     {
         ArgumentNullException.ThrowIfNull(values);
 
-        _element.Snapshot = new SpectrumSnapshot(values, _colors, _bars);
+        _element.Snapshot = new SpectrumSnapshot(values, _colors, _bars, _framesPerSecond);
 
         // Элемент отсоединён от дерева, поэтому присваивание свойства не запускает разметку
         // само по себе. Без UpdateLayout отсоединённый FrameworkElement отдаёт пустой кадр:

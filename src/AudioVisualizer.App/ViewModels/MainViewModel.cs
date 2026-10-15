@@ -519,7 +519,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             ? new float[BarCount(settings)]
             : _frames.GetBars(position ?? TimeSpan.Zero);
 
-        Snapshot = new SpectrumSnapshot(values, settings.Colors, bars);
+        // Частота кадров идёт в снимок из настроек экспорта: след затухает по времени, а таймер
+        // превью бьёт с той же частотой, поэтому длина следа в превью и в ролике совпадает.
+        Snapshot = new SpectrumSnapshot(values, settings.Colors, bars, settings.Export.FramesPerSecond);
     }
 
     /// <summary>

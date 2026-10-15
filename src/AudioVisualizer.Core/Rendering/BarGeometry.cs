@@ -20,13 +20,16 @@ public static class BarGeometry
 
         Geometry geometry = cornerStyle switch
         {
-            CornerStyle.Rectangular => Freeze(new RectangleGeometry(rect)),
+            CornerStyle.Rectangular => Rect(rect),
             CornerStyle.Rounded => Freeze(new RectangleGeometry(rect, effectiveRadius, effectiveRadius)),
             _ => Freeze(BuildOuterRounded(rect, effectiveRadius, outerCornersAtTop))
         };
 
         return geometry;
     }
+
+    /// <summary>Прямой прямоугольник без скругления: полоса следа уходит в прозрачность, углы не видны.</summary>
+    public static Geometry Rect(Rect rect) => Freeze(new RectangleGeometry(rect));
 
     /// <summary>
     /// Столбик со скруглёнными только внешними углами: у центральной линии углы прямые,

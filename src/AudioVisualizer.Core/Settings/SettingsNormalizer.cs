@@ -47,6 +47,7 @@ public static class SettingsNormalizer
             BorderWidth = Math.Clamp(bars.BorderWidth, 0d, 20d),
             Margin = Math.Clamp(bars.Margin, 0, 2000),
             CenterGap = Math.Clamp(bars.CenterGap, 0, 500),
+            TrailDecayMs = Math.Clamp(bars.TrailDecayMs, 0d, 5000d),
             CornerStyle = Enum.IsDefined(bars.CornerStyle) ? bars.CornerStyle : CornerStyle.OuterRounded,
             FillMode = Enum.IsDefined(bars.FillMode) ? bars.FillMode : BarFillMode.VerticalGradient
         };

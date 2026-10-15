@@ -21,10 +21,11 @@ public class SpectrumElementTests
         return element;
     }
 
-    private static SpectrumSnapshot Snapshot(
+private static SpectrumSnapshot Snapshot(
         float[] values,
         Func<BarSettings, BarSettings>? configureBars = null,
-        ColorSettings? colors = null)
+        ColorSettings? colors = null,
+        int framesPerSecond = 60)
     {
         var bars = new BarSettings
         {
@@ -38,7 +39,7 @@ public class SpectrumElementTests
             BorderWidth = 0d
         };
 
-        return new SpectrumSnapshot(values, colors ?? new ColorSettings(), configureBars is null ? bars : configureBars(bars));
+        return new SpectrumSnapshot(values, colors ?? new ColorSettings(), configureBars is null ? bars : configureBars(bars), framesPerSecond);
     }
 
     /// <summary>Рисует элемент в отдельный DrawingVisual и отдаёт геометрии, которые он вывел.</summary>
@@ -53,9 +54,33 @@ public class SpectrumElementTests
         return visual.Drawing?.Children.OfType<GeometryDrawing>().ToArray() ?? [];
     }
 
-    /// <summary>Столбики рисуются геометрией, фон и центральная линия - прямоугольниками.</summary>
+/// <summary>Столбики рисуются геометрией, фон и центральная линия - прямоугольниками.</summary>
     private static GeometryDrawing[] BarsOf(TestElement element)
         => DrawingsOf(element).Where(drawing => drawing.Geometry is not RectangleGeometry).ToArray();
+
+    /// <summary>
+    /// Полосы следа: у них градиент по габаритам самой полосы, а заливка столбиков идёт
+    /// градиентом по координатам кадра. На разнице в режиме отображения и держится выбор:
+    /// при однотонной заливке полосы иначе и не отличить от столбиков.
+    /// </summary>
+    private static GeometryDrawing[] TrailsOf(TestElement element)
+        => DrawingsOf(element)
+            .Where(drawing => drawing.Brush is LinearGradientBrush { MappingMode: BrushMappingMode.RelativeToBoundingBox })
+            .ToArray();
+
+    private static TestElement CreateTrailElement()
+        => CreateElement(Snapshot([1f], bars => bars with { TrailDecayMs = 500d }));
+
+    /// <summary>Два кадра: высокий столбик, затем вдвое ниже. Возвращает элемент после второго.</summary>
+    private static TestElement FallFrame()
+    {
+        var element = CreateTrailElement();
+        DrawingsOf(element);
+
+        element.Snapshot = Snapshot([0.5f], bars => bars with { TrailDecayMs = 500d });
+
+        return element;
+    }
 
     [Fact]
     public void БезСнимка_НичегоНеРисует() => Sta.Run(() => Assert.Empty(DrawingsOf(CreateElement(null))));
@@ -159,11 +184,141 @@ public class SpectrumElementTests
         Assert.Null(BarsOf(CreateElement(snapshot))[0].Pen);
     });
 
-    [Fact]
+[Fact]
     public void ПустойСнимок_ДаётТолькоФон() => Sta.Run(() => Assert.Single(DrawingsOf(CreateElement(SpectrumSnapshot.Empty))));
 
-    private sealed class TestElement : SpectrumElement
+    [Fact]
+    public void Градиент_ЦентрСтолбикаЦветЦентра_АКрайЦветКрая() => Sta.Run(() =>
+    {
+        var colors = new ColorSettings { BarFill = new RgbaColor(56, 132, 255), BarFillSecondary = new RgbaColor(255, 96, 168) };
+        var bars = BarsOf(CreateElement(Snapshot([1f], bars => bars with { FillMode = BarFillMode.VerticalGradient }, colors)));
+
+        Assert.Equal(2, bars.Length);
+
+        // Отступ 20, центр 225, половина зазора 2, высота при единице 203: верхняя половина
+        // идёт от верхнего края кадра к центру, нижняя - от центра к нижнему краю.
+        var upper = (LinearGradientBrush)bars[0].Brush!;
+        var lower = (LinearGradientBrush)bars[1].Brush!;
+
+        Assert.Equal(BrushMappingMode.Absolute, upper.MappingMode);
+        Assert.Equal(20d, upper.StartPoint.Y, 5);
+        Assert.Equal(223d, upper.EndPoint.Y, 5);
+        Assert.Equal(colors.BarFillSecondary, Near(upper.GradientStops[0].Color));
+        Assert.Equal(colors.BarFill, Near(upper.GradientStops[^1].Color));
+
+        Assert.Equal(227d, lower.StartPoint.Y, 5);
+        Assert.Equal(430d, lower.EndPoint.Y, 5);
+        Assert.Equal(colors.BarFill, Near(lower.GradientStops[0].Color));
+        Assert.Equal(colors.BarFillSecondary, Near(lower.GradientStops[^1].Color));
+    });
+
+    [Fact]
+    public void ПолосаСледа_БерётЦветСтолбикаНаТойЖеВысоте() => Sta.Run(() =>
+    {
+        var colors = new ColorSettings { BarFill = new RgbaColor(56, 132, 255), BarFillSecondary = new RgbaColor(255, 96, 168) };
+
+        var element = CreateElement(Snapshot([1f], bars => bars with { FillMode = BarFillMode.VerticalGradient, TrailDecayMs = 500d }, colors));
+        DrawingsOf(element);
+
+        element.Snapshot = Snapshot([0.25f], bars => bars with { FillMode = BarFillMode.VerticalGradient, TrailDecayMs = 500d }, colors);
+
+        // Верхушка столбика на 172.25 при градиенте от 20 до 223, то есть три четверти пути от
+        // цвета края к цвету центра: (106, 123, 233). Половину пути брать нельзя: там оба цвета
+        // усредняются в один, и переставленные местами цвета дали бы тот же ответ.
+        var seam = ((LinearGradientBrush)TrailsOf(element)[0].Brush!).GradientStops[^1].Color;
+
+        Assert.InRange(seam.R, 105, 107);
+        Assert.InRange(seam.G, 122, 124);
+        Assert.InRange(seam.B, 232, 234);
+    });
+
+    [Fact]
+    public void СледВыключен_ПолосНеРисуется() => Sta.Run(() =>
+    {
+        var element = CreateElement(Snapshot([1f]));
+        DrawingsOf(element);
+
+        element.Snapshot = Snapshot([0.5f]);
+
+        Assert.Empty(TrailsOf(element));
+    });
+
+    [Fact]
+    public void Убывание_ОставляетПолосуОтПрежнейВысоты() => Sta.Run(() =>
+    {
+        var trails = TrailsOf(FallFrame());
+
+        // Половина сверху и половина снизу. Отступ 20, центр 225, половина зазора 2, высота
+        // при единице 203: призрак 0.967 - это вершина 26.7 вместо нынешних 121.5.
+        Assert.Equal(2, trails.Length);
+        Assert.Equal(94.8d, trails[0].Geometry.Bounds.Height, 1);
+        Assert.Equal(26.7d, trails[0].Geometry.Bounds.Top, 1);
+        Assert.Equal(FrameHeight - 26.7d, trails[1].Geometry.Bounds.Bottom, 1);
+        Assert.Equal(trails[0].Geometry.Bounds.Width, trails[1].Geometry.Bounds.Width, 5);
+    });
+
+    [Fact]
+    public void ПолосаСледа_ГаснетОтПрежнейВершиныКСтолбику() => Sta.Run(() =>
+    {
+        var colors = new ColorSettings { BarFill = new RgbaColor(10, 20, 30) };
+        var element = CreateElement(Snapshot([1f], bars => bars with { TrailDecayMs = 500d }, colors));
+        DrawingsOf(element);
+
+        element.Snapshot = Snapshot([0.5f], bars => bars with { TrailDecayMs = 500d }, colors);
+
+        var trails = TrailsOf(element);
+
+        // Сверху след уходит в прозрачность, снизу - в цвет столбика: у нижней половины
+        // наоборот, потому что полоса растёт от центра вниз.
+        Assert.Equal(0, ((LinearGradientBrush)trails[0].Brush!).GradientStops[0].Color.A);
+        Assert.Equal(255, ((LinearGradientBrush)trails[0].Brush!).GradientStops[^1].Color.A);
+        Assert.Equal(0, ((LinearGradientBrush)trails[1].Brush!).GradientStops[^1].Color.A);
+
+        // Край у столбика берёт цвет заливки на этой высоте, поэтому стыка не видно.
+        Assert.Equal(10, ((LinearGradientBrush)trails[0].Brush!).GradientStops[^1].Color.R);
+    });
+
+    [Fact]
+    public void ОдинИтотЖеКадрДважды_СледНеСдвигается() => Sta.Run(() =>
+    {
+        var element = FallFrame();
+        var first = TrailsOf(element).Select(drawing => drawing.Geometry.Bounds).ToArray();
+
+        var second = TrailsOf(element).Select(drawing => drawing.Geometry.Bounds).ToArray();
+
+        Assert.NotEmpty(first);
+        Assert.Equal(first, second);
+    });
+
+    [Fact]
+    public void РостСтолбика_СледаНет() => Sta.Run(() =>
+    {
+        var element = CreateTrailElement();
+        DrawingsOf(element);
+
+        element.Snapshot = Snapshot([1f], bars => bars with { TrailDecayMs = 500d });
+
+        Assert.Empty(TrailsOf(element));
+    });
+
+    [Fact]
+    public void ВключениеСледа_ПервыйКадрБезСледа() => Sta.Run(() =>
+    {
+        var element = CreateElement(Snapshot([1f]));
+        DrawingsOf(element);
+
+        // Выключенный след держится только пока выключен: включать его на ходу - значит
+        // получить вспышку призрака по старой высоте.
+        element.Snapshot = Snapshot([0.5f], bars => bars with { TrailDecayMs = 500d });
+
+        Assert.Empty(TrailsOf(element));
+    });
+
+private sealed class TestElement : SpectrumElement
     {
         public void Render(DrawingContext context) => OnRender(context);
     }
+
+    /// <summary>Цвет WPF в виде настройки: так его можно сравнить с <see cref="ColorSettings"/>.</summary>
+    private static RgbaColor Near(Color color) => new(color.R, color.G, color.B, color.A);
 }

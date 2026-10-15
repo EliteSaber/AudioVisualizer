@@ -48,6 +48,13 @@ public class SettingsNormalizerTests
     }
 
     [Fact]
+    public void Normalize_ВремяСледа_Ограничивается()
+    {
+        Assert.Equal(0d, SettingsNormalizer.NormalizeBars(new BarSettings { TrailDecayMs = -100d }).TrailDecayMs);
+        Assert.Equal(5000d, SettingsNormalizer.NormalizeBars(new BarSettings { TrailDecayMs = 999_999d }).TrailDecayMs);
+    }
+
+    [Fact]
     public void Normalize_НеизвестныйВидСкругления_ЗаменяетсяНаУмолчание()
     {
         var bars = SettingsNormalizer.NormalizeBars(new BarSettings { CornerStyle = (CornerStyle)99 });

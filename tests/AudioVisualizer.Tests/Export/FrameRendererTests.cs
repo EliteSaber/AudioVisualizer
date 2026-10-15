@@ -79,6 +79,26 @@ public class FrameRendererTests
     }
 
     [Fact]
+    public void Render_СоСледом_ТихийКадрНеПустой()
+    {
+        // Обратная сторона очистки буфера: след рисуется сам, а не остаётся в буфере от
+        // предыдущего кадра. Фон и центральная линия прозрачные, поэтому ненулевые байты
+        // могут быть только призраком прежней высоты.
+        var colors = new ColorSettings { Background = RgbaColor.Transparent, CenterLine = RgbaColor.Transparent };
+        var bars = Bars with { TrailDecayMs = 500d };
+
+        var frame = Sta.Get(() =>
+        {
+            var renderer = new FrameRenderer(320, 240, colors, bars);
+            renderer.Render(Enumerable.Repeat(1f, 32).ToArray());
+
+            return renderer.Render(new float[32]).ToArray();
+        });
+
+        Assert.Contains(frame, value => value != 0);
+    }
+
+    [Fact]
     public void СлишкомМногоЗначений_ЛишниеНеЛомаютКадр()
     {
         var expected = RenderFrame(new float[32]);

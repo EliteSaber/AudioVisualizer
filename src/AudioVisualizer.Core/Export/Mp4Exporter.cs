@@ -193,7 +193,14 @@ public sealed class Mp4Exporter : IVideoExporter
         return RunOnStaThread(() =>
         {
             var export = settings.Export;
-            var renderer = new FrameRenderer(export.Width, export.Height, settings.Colors, settings.Bars);
+            // Частота кадров тоже сюда: след затухает по времени, и без неё его длина в ролике
+            // зависела бы от пресета выгрузки.
+            var renderer = new FrameRenderer(
+                export.Width,
+                export.Height,
+                settings.Colors,
+                settings.Bars,
+                export.FramesPerSecond);
 
             for (var frame = 0; frame < totalFrames; frame++)
             {

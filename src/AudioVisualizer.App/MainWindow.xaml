@@ -538,8 +538,17 @@
                     Ошибки красные, остальные сообщения обычные. Признак берётся у модели окна:
                     DataContext у этой надписи и есть MainViewModel, поэтому ссылка без
                     RelativeSource разрешается сама собой.
+
+                    В строке только заголовок ошибки, подробности - в подсказке. Сама подсказка
+                    не задана разметкой и приходит из StatusHint.Attach: содержимое ToolTip живёт
+                    в попапе, DataContext в него не наследуется, и привязка внутри подсказки
+                    выглядит работающей, пока не окажется пустой.
+
+                    Пустая подсказка гасится признаком, иначе у обычных сообщений по наведению
+                    появлялся бы пустой прямоугольник.
                 -->
-            <TextBlock VerticalAlignment="Center"
+            <TextBlock x:Name="StatusText"
+                       VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis"
                        Text="{Binding Status}">
                 <TextBlock.Style>
@@ -548,6 +557,9 @@
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsStatusError}" Value="True">
                                 <Setter Property="Foreground" Value="{StaticResource StatusErrorBrush}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding StatusDetail}" Value="">
+                                <Setter Property="ToolTipService.IsEnabled" Value="False" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>

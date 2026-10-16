@@ -87,6 +87,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Ошибка в строке статуса: она красится красным, пока не придёт обычное сообщение.</summary>
     [ObservableProperty] private bool _isStatusError;
 
+    /// <summary>
+    /// Подробности сообщения для подсказки на строке статуса. В самой строке только заголовок:
+    /// слова ffmpeg и команда запуска обрезались бы многоточием, поэтому полный текст живёт
+    /// здесь и в окне. У обычных сообщений подробностей нет, и строка пустая.
+    /// </summary>
+    [ObservableProperty] private string _statusDetail = string.Empty;
+
     [ObservableProperty] private bool _isBusy;
 
     [ObservableProperty] private double _previewWidth;
@@ -151,32 +158,40 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Сообщение для показа окном: и об ошибке, и об удачной выгрузке. Заголовок и текст
-    /// разведены: заголовок короткий и повторяет префикс строки статуса, а текст бывает
+    /// разведены: заголовок короткий и в строке статуса остаётся он, а текст бывает
     /// на пол-экрана, и в строке статуса он обрезается.
     /// </summary>
     public Action<Notice>? NoticeRequested { get; set; }
 
-/// <summary>
+    /// <summary>
     /// Пишет сообщение в строку статуса и сразу помечает его ошибкой или нет. Через один
     /// метод, а не присваиванием напрямую: обычное сообщение обязано гасить красный цвет
     /// предыдущей ошибки, а забытое присваивание оставило бы её навсегда.
     /// </summary>
-    private void SetStatus(string text, bool isError = false)
+    /// <param name="text">Текст строки. У ошибки это только заголовок.</param>
+    /// <param name="isError">Ошибка ли это: строка красится красным.</param>
+    /// <param name="detail">
+    /// Подробности для подсказки. Снимается на каждом сообщении, иначе подсказка от прежней
+    /// ошибки осталась бы висеть под обычным текстом.
+    /// </param>
+    private void SetStatus(string text, bool isError = false, string? detail = null)
     {
         Status = text;
         IsStatusError = isError;
+        StatusDetail = detail ?? string.Empty;
     }
 
     /// <summary>
-    /// Собирает отчёт об ошибке и отдаёт его в строку статуса и окну. Строка остаётся на
-    /// месте: после закрытия окна текст всё равно должен быть виден, и по нему же проверяют
-    /// ошибки тесты.
+    /// Собирает отчёт об ошибке и отдаёт его в строку статуса и окну. В строку идёт только
+    /// заголовок: подробности про ffmpeg и команду запуска обрезались бы многоточием, и после
+    /// закрытия окна осталось бы нечитаемое «Не удалось выгрузить видео: ffmpeg vers...».
+    /// Полный текст остаётся в подсказке строки и в самом окне.
     /// </summary>
     private void ReportError(string title, Exception exception)
     {
         var notice = new Notice(title, exception.Message);
 
-        SetStatus($"{notice.Title}: {notice.Message}", isError: true);
+        SetStatus(notice.Title, isError: true, notice.Message);
 
         // Все четыре места вызова живут на потоке интерфейса: два в обработчиках команд,
         // два в продолжениях await, которые возвращаются на SynchronizationContext окна.
@@ -219,6 +234,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // Отказ повторялся бы на каждой правке и затирал бы сведения о треке, поэтому текст
         // появляется только на переходе «работало → сломалось». Об успехе не сообщаем вовсе:
         // это обычный порядок вещей.
+        //
+        // Здесь причина остаётся в строке, в отличие от остальных ошибок: окна у этого отказа
+        // нет, а «Не удалось сохранить настройки» без причины ни о чём не говорит.
         if (!_saveFailed)
         {
             SetStatus("Не удалось сохранить настройки: " + failure, isError: true);

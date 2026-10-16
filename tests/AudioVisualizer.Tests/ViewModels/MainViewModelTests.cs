@@ -252,6 +252,21 @@ using var sine = SineWav();
         }
     }
 
+[Fact]
+    public async Task ОшибкаОткрытия_ВСтрокеЗаголовокАПричинаВПодсказке()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(@"Z:\нет\такого.mp3");
+
+            // Причина открытия видна не сразу: окно показывает её с прокруткой, а строка
+            // статуса - только заголовок, который и без обрезки помещается целиком.
+            Assert.Equal("Не удалось открыть файл", viewModel.Status);
+            Assert.Contains("такого.mp3", viewModel.StatusDetail, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public async Task ИзменениеНастроек_ПересчитываетКадр()
     {

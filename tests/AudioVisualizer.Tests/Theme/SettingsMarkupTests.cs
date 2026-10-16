@@ -34,6 +34,36 @@ public class SettingsMarkupTests
     }
 
     [Fact]
+    public void ПодсказкаСтрокиСтатуса_НеЗаданаРазметкой()
+    {
+        var status = Status();
+
+        // Подсказку назначает StatusHint.Attach: содержимое ToolTip живёт в попапе, DataContext
+        // в него не наследуется, и привязка внутри подсказки выглядит работающей, пока не
+        // окажется пустой. Так и вышло - подсказка была пустым белым квадратом.
+        Assert.DoesNotContain(status.Elements(), element => element.Name.LocalName.EndsWith(".ToolTip", StringComparison.Ordinal));
+
+        // Имя нужно коду окна, которое зовёт хелпер. Ищется по имени, а не по пространству
+        // имён: в разметке это x:Name.
+        var name = status.Attributes().SingleOrDefault(attribute => attribute.Name.LocalName == "Name")?.Value;
+
+        Assert.Equal("StatusText", name);
+    }
+
+    [Fact]
+    public void ПустаяПодсказка_Выключена()
+    {
+        // Подробности есть не у каждого сообщения, а попап с пустым текстом всё равно
+        // появляется - маленьким пустым прямоугольником под обычным сообщением.
+        var triggers = Status().Descendants().Where(element => element.Name.LocalName == "DataTrigger").ToArray();
+
+        Assert.Contains(triggers, trigger =>
+            trigger.Attribute("Binding")?.Value == "{Binding StatusDetail}"
+            && (string?)trigger.Attribute("Value") == string.Empty
+            && trigger.Elements().Any(setter => (string?)setter.Attribute("Property") == "ToolTipService.IsEnabled"));
+    }
+
+    [Fact]
     public void ПодсказкаТихойВыгрузки_ЗаданаНаСтроке()
     {
         var row = Row("Тихая выгрузка");
@@ -46,6 +76,12 @@ public class SettingsMarkupTests
 
         Assert.Null(checkbox.Attribute("ToolTip"));
     }
+
+    /// <summary>Надпись строки статуса: единственная в окне, у которой текст привязан к Status.</summary>
+    private static XElement Status()
+        => MainWindow()
+            .Descendants()
+            .Single(element => element.Name.LocalName == "TextBlock" && (string?)element.Attribute("Text") == "{Binding Status}");
 
     private static XElement Row(string label)
         => MainWindow()

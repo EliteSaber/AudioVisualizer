@@ -84,7 +84,7 @@ public class ExportTests
     }
 
     [Fact]
-    public async Task ОшибкаВыгрузки_ПишетсяВСтатус()
+    public async Task ОшибкаВыгрузки_ВСтрокуИдётТолькоЗаголовок()
     {
         var (viewModel, exporter, directory, _) = Create();
         using (directory)
@@ -94,9 +94,33 @@ public class ExportTests
 
             await viewModel.ExportVideoAsync(Path.Combine(directory.Root, "итог.mp4"));
 
-            Assert.Contains("ffmpeg не найден", viewModel.Status, StringComparison.Ordinal);
+            // Строка обрезала бы подробности многоточием, поэтому в ней остаётся заголовок,
+            // а весь текст живёт в подсказке и в окне.
+            Assert.Equal("Не удалось выгрузить видео", viewModel.Status);
+            Assert.Equal("ffmpeg не найден", viewModel.StatusDetail);
+            Assert.True(viewModel.IsStatusError);
             Assert.False(viewModel.IsExporting);
             Assert.True(viewModel.CanExport);
+        }
+    }
+
+    [Fact]
+    public async Task ОбычноеСообщение_ГаситПодробностиПрежнейОшибки()
+    {
+        var (viewModel, exporter, directory, _) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedSine.Path);
+            exporter.Failure = new VideoExportException("ffmpeg перестал читать кадры");
+
+            await viewModel.ExportVideoAsync(Path.Combine(directory.Root, "итог.mp4"));
+            Assert.NotEmpty(viewModel.StatusDetail);
+
+            // Иначе подсказка на строке показывала бы ошибку, которой на экране уже нет.
+            await viewModel.LoadFileAsync(SharedSine.Path);
+
+            Assert.Equal(string.Empty, viewModel.StatusDetail);
+            Assert.False(viewModel.IsStatusError);
         }
     }
 

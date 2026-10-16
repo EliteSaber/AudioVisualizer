@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using AudioVisualizer.App.Controls;
 using AudioVisualizer.App.ViewModels;
 
 namespace AudioVisualizer.App;
@@ -18,6 +19,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // Подсказка строки статуса задаётся кодом: привязка внутри ToolTip не видит DataContext
+        // надписи, потому что содержимое подсказки живёт в отдельном попапе.
+        StatusHint.Attach(StatusText);
 
         var viewModel = new MainViewModel();
 

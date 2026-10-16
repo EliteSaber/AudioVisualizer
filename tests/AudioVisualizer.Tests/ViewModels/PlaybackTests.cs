@@ -173,6 +173,10 @@ public class PlaybackTests
 
             Assert.False(viewModel.IsPlaying);
             Assert.Contains("Не удалось включить воспроизведение", viewModel.Status);
+
+            // В строке только заголовок, а сама причина - в подсказке строки.
+            Assert.Equal("формат не играется", viewModel.StatusDetail);
+            Assert.DoesNotContain("формат не играется", viewModel.Status, StringComparison.Ordinal);
         }
     }
 

@@ -1,6 +1,10 @@
 # AudioVisualizer
 
-![AudioVisualizer](docs/logo.png)
+<div align="center">
+
+  <img src="docs/logo.png" width="180" alt="AudioVisualizer" />
+
+</div>
 
 Приложение загружает аудиофайл, показывает спектр в реальном времени и выгружает mp4 с
 визуализацией. Столбики расходятся от центральной линии зеркально вверх и вниз.

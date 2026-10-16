@@ -439,6 +439,13 @@
                                 <controls:SettingRow Label="{Binding Settings.ExportFramesPerSecond, StringFormat={}Кадров в секунду: {0}}">
                                     <Slider Minimum="1" Maximum="120" Value="{Binding Settings.ExportFramesPerSecond, Mode=TwoWay}" />
                                 </controls:SettingRow>
+                                <controls:SettingRow Label="Кодек видео"
+                                                    ToolTip="H.265 — файл меньше, кодирование дольше">
+                                    <ComboBox ItemsSource="{Binding Settings.VideoCodecChoices}"
+                                              ItemTemplate="{StaticResource ChoiceTemplate}"
+                                              SelectedValuePath="Value"
+                                              SelectedValue="{Binding Settings.VideoCodec, Mode=TwoWay}" />
+                                </controls:SettingRow>
                                 <controls:SettingRow Label="{Binding Settings.Crf, StringFormat={}Качество CRF {0}}">
                                     <Slider Minimum="0" Maximum="40" Value="{Binding Settings.Crf, Mode=TwoWay}" />
                                 </controls:SettingRow>

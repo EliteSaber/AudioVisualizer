@@ -101,6 +101,7 @@ public class SettingsViewModelTests
         Assert.Equal(1280, viewModel.ExportWidth);
         Assert.Equal(720, viewModel.ExportHeight);
         Assert.Equal(30, viewModel.ExportFramesPerSecond);
+        Assert.Equal(ExportSettings.DefaultVideoCodec, viewModel.VideoCodec);
         Assert.Equal(18, viewModel.Crf);
         Assert.Equal("medium", viewModel.CodecPreset);
         Assert.Equal(192, viewModel.AudioBitrateKbps);
@@ -129,6 +130,29 @@ public class SettingsViewModelTests
         Assert.Equal(ExportSettings.DefaultAacCoder, viewModel.AacCoder);
         Assert.Equal(viewModel.AacCoder, viewModel.AacCoderChoices[0]);
         Assert.Contains(viewModel.AacCoder, viewModel.AacCoderChoices);
+    }
+
+    [Fact]
+    public void КодекВидео_ДоезжаетВНастройкиИОбратно()
+    {
+        // Значение обязано дойти до команды ffmpeg: иначе панель настраивает то,
+        // чего выгрузка не спрашивает.
+        var viewModel = Create();
+
+        viewModel.VideoCodec = "libx265";
+        Assert.Equal("libx265", viewModel.ToAppSettings().Export.VideoCodec);
+
+        viewModel.Apply(AppSettings.Default with { Export = new ExportSettings { VideoCodec = "libx265" } });
+        Assert.Equal("libx265", viewModel.VideoCodec);
+    }
+
+    [Fact]
+    public void КодекВидео_ПоУмолчаниюИзНастроек()
+    {
+        var viewModel = Create();
+
+        Assert.Equal(ExportSettings.DefaultVideoCodec, viewModel.VideoCodec);
+        Assert.Contains(viewModel.VideoCodec, viewModel.VideoCodecChoices.Select(choice => choice.Value));
     }
 
     [Fact]
@@ -169,6 +193,7 @@ public class SettingsViewModelTests
 
     [Theory]
     [InlineData("ExportFramesPerSecond")]
+    [InlineData("VideoCodec")]
     [InlineData("Crf")]
     [InlineData("CodecPreset")]
     [InlineData("AudioBitrateKbps")]
@@ -183,6 +208,7 @@ public class SettingsViewModelTests
             propertyName switch
             {
                 "ExportFramesPerSecond" => 24,
+                "VideoCodec" => "libx265",
                 "Crf" => 20,
                 "CodecPreset" => "fast",
                 "AacCoder" => "twoloop",
@@ -252,6 +278,8 @@ public class SettingsViewModelTests
         var viewModel = Create();
 
         Assert.NotEmpty(viewModel.CodecPresets);
+        Assert.Equal(2, viewModel.VideoCodecChoices.Count);
+        Assert.All(viewModel.VideoCodecChoices, choice => Assert.Contains(choice.Value, ExportSettings.VideoCodecs));
         Assert.Equal(3, viewModel.CornerStyleChoices.Count);
         Assert.Equal(2, viewModel.FillModeChoices.Count);
         Assert.Equal(3, viewModel.ExportPresets.Count);

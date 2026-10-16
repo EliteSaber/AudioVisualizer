@@ -59,6 +59,68 @@ public class FfmpegArgumentsTests
         Assert.Contains("256k", arguments);
     }
 
+    [Theory]
+    [InlineData("libx264")]
+    [InlineData("libx265")]
+    public void Build_КодекВидеоСтоитРядомС_Cv(string codec)
+    {
+        // -c:v берётся из настроек: у обоих кодеков общие -preset и -crf, поэтому
+        // переключение кодека не должно менять остальную команду.
+        var arguments = FfmpegArguments.Build(Settings with { VideoCodec = codec }, "аудио.wav", "итог.mp4").ToArray();
+        var index = Array.IndexOf(arguments, "-c:v");
+
+        Assert.True(index > 0, "в команде нет -c:v");
+        Assert.Equal(codec, arguments[index + 1]);
+        Assert.Contains("fast", arguments);
+        Assert.Contains("20", arguments);
+    }
+
+    [Fact]
+    public void Build_КодекВидеоПриводитсяКНижнемуРегистру()
+    {
+        var arguments = FfmpegArguments.Build(Settings with { VideoCodec = " LIBX265 " }, "аудио.wav", "итог.mp4").ToArray();
+        var index = Array.IndexOf(arguments, "-c:v");
+
+        Assert.Equal("libx265", arguments[index + 1]);
+    }
+
+    [Fact]
+    public void H265_ПомечаетсяТегомHvc1()
+    {
+        // Без тега ffmpeg пишет hev1, а его не открывают QuickTime и часть плееров на
+        // телефонах: разница в том, где лежат служебные записи кодека.
+        var arguments = FfmpegArguments.Build(Settings with { VideoCodec = "libx265" }, "аудио.wav", "итог.mp4").ToArray();
+        var index = Array.IndexOf(arguments, "-tag:v");
+
+        Assert.True(index > 0, "в команде нет -tag:v");
+        Assert.Equal("hvc1", arguments[index + 1]);
+    }
+
+    [Fact]
+    public void H264_ТегДорожкиНеЗадан()
+    {
+        // avc1 читается везде сам, лишний тег у mp4 с H.264 был бы враньём в команду.
+        Assert.DoesNotContain("-tag:v", FfmpegArguments.Build(Settings, "аудио.wav", "итог.mp4"));
+    }
+
+    [Fact]
+    public void НеизвестныйКодекВидео_Отклоняется()
+    {
+        var settings = Settings with { VideoCodec = "libvpx-vp9" };
+
+        var exception = Assert.Throws<ArgumentException>(
+            () => FfmpegArguments.Build(settings, "аудио.wav", "итог.mp4"));
+
+        Assert.Contains("libvpx-vp9", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ПустойКодекВидео_Отклоняется()
+    {
+        Assert.Throws<ArgumentException>(
+            () => FfmpegArguments.Build(Settings with { VideoCodec = " " }, "аудио.wav", "итог.mp4"));
+    }
+
     [Fact]
     public void Build_ПоследнийАргумент_ПутьРезультата()
     {

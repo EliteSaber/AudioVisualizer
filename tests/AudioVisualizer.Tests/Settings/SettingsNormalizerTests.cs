@@ -219,6 +219,23 @@ public class SettingsNormalizerTests
     }
 
     [Fact]
+    public void Normalize_КодекВидео_ПриводитсяКИзвестному()
+    {
+        Assert.Equal("libx265", SettingsNormalizer.NormalizeExport(new ExportSettings { VideoCodec = " LIBX265 " }).VideoCodec);
+        Assert.Equal("libx264", SettingsNormalizer.NormalizeExport(new ExportSettings { VideoCodec = "libvpx-vp9" }).VideoCodec);
+        Assert.Equal("libx264", SettingsNormalizer.NormalizeExport(new ExportSettings { VideoCodec = null! }).VideoCodec);
+    }
+
+    [Theory]
+    [InlineData("libx264")]
+    [InlineData("libx265")]
+    public void Normalize_КодекВидео_КаждыйИзСпискаПроходит(string codec)
+    {
+        Assert.Contains(codec, ExportSettings.VideoCodecs);
+        Assert.Equal(codec, SettingsNormalizer.NormalizeExport(new ExportSettings { VideoCodec = codec }).VideoCodec);
+    }
+
+    [Fact]
     public void Normalize_ПутьКFfmpeg_ПустоеЗначениеСтановитсяNull()
     {
         Assert.Null(SettingsNormalizer.NormalizeExport(new ExportSettings { FfmpegPath = "   " }).FfmpegPath);

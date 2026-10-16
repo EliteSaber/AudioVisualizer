@@ -120,10 +120,22 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private int _exportWidth;
     [ObservableProperty] private int _exportHeight;
     [ObservableProperty] private int _exportFramesPerSecond;
+    [ObservableProperty] private string _videoCodec = ExportSettings.DefaultVideoCodec;
     [ObservableProperty] private int _crf;
     [ObservableProperty] private string _codecPreset = "medium";
     [ObservableProperty] private int _audioBitrateKbps;
     [ObservableProperty] private string _ffmpegPath = string.Empty;
+
+    /// <summary>
+    /// Кодек видео. В списке показан как H.264 и H.265, в настройках и в команде ffmpeg
+    /// остаётся имя кодировщика: подписьми своими словами мы бы обещали совместимость,
+    /// которой у H.265 в старых проигрывателях нет.
+    /// </summary>
+    public IReadOnlyList<Choice<string>> VideoCodecChoices { get; } =
+    [
+        new(ExportSettings.VideoCodecs[0], "H.264"),
+        new(ExportSettings.VideoCodecs[1], "H.265")
+    ];
 
     /// <summary>
     /// Кодировщик звука AAC. Имена оставлены как в ffmpeg и без своих пометок: проверено
@@ -179,6 +191,7 @@ CenterGap = BarCenterGap,
             Width = ExportWidth,
             Height = ExportHeight,
             FramesPerSecond = ExportFramesPerSecond,
+            VideoCodec = VideoCodec,
             Crf = Crf,
             CodecPreset = CodecPreset,
             AudioBitrateKbps = AudioBitrateKbps,
@@ -229,6 +242,7 @@ BarCenterGap = settings.Bars.CenterGap;
             ExportWidth = settings.Export.Width;
             ExportHeight = settings.Export.Height;
             ExportFramesPerSecond = settings.Export.FramesPerSecond;
+            VideoCodec = settings.Export.VideoCodec;
             Crf = settings.Export.Crf;
             CodecPreset = settings.Export.CodecPreset;
             AudioBitrateKbps = settings.Export.AudioBitrateKbps;
@@ -255,6 +269,7 @@ BarCenterGap = settings.Bars.CenterGap;
         if (e.PropertyName is nameof(ExportWidth)
             or nameof(ExportHeight)
             or nameof(ExportFramesPerSecond)
+            or nameof(VideoCodec)
             or nameof(Crf)
             or nameof(CodecPreset)
             or nameof(AudioBitrateKbps)
@@ -399,6 +414,7 @@ BarCenterGap = settings.Bars.CenterGap;
             ExportWidth = export.Width;
             ExportHeight = export.Height;
             ExportFramesPerSecond = export.FramesPerSecond;
+            VideoCodec = export.VideoCodec;
             Crf = export.Crf;
             CodecPreset = export.CodecPreset;
             AudioBitrateKbps = export.AudioBitrateKbps;

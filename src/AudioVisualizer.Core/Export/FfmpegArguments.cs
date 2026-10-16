@@ -18,6 +18,20 @@ public static class FfmpegArguments
         "ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"
     ];
 
+    /// <summary>
+    /// Кодек, mp4 с которым без тега hvc1 откроют не все. Имя живёт здесь, а не в списке
+    /// кодеков: настройка отвечает за то, что выбирает пользователь, а тег — за особенность
+    /// упаковки, о которой выбирающий не знает.
+    /// </summary>
+    private const string HevcCodec = "libx265";
+
+    /// <summary>
+    /// Тег дорожки H.265. Без него ffmpeg пишет hev1, а его не открывают QuickTime и часть
+    /// плееров на телефонах: разница в том, где лежат служебные записи кодека, и читающий
+    /// игнорирует их вместо нужных.
+    /// </summary>
+    private static readonly string[] HevcMp4Tag = ["-tag:v", "hvc1"];
+
     public static IReadOnlyList<string> Build(ExportSettings settings, string audioPath, string outputPath)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -43,6 +57,14 @@ public static class FfmpegArguments
 
         var crf = Math.Clamp(settings.Crf, 0, 51);
         var bitrate = Math.Clamp(settings.AudioBitrateKbps, 32, 320);
+
+        var videoCodec = settings.VideoCodec?.Trim().ToLowerInvariant();
+        if (videoCodec is null || !ExportSettings.VideoCodecs.Contains(videoCodec, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"Неизвестный кодек видео \"{settings.VideoCodec}\". Ожидается один из: {string.Join(", ", ExportSettings.VideoCodecs)}.",
+                nameof(settings));
+        }
 
         var coder = settings.AacCoder?.Trim().ToLowerInvariant();
         if (coder is null || !ExportSettings.AacCoders.Contains(coder, StringComparer.OrdinalIgnoreCase))
@@ -72,7 +94,10 @@ public static class FfmpegArguments
 
             "-map", "0:v",
             "-map", "1:a",
-            "-c:v", "libx264",
+
+            // Кодек берётся из настроек: у x264 и x265 общие -preset и -crf, поэтому
+            // переключение между ними не трогает остальную команду.
+            "-c:v", videoCodec,
             "-preset", preset,
             "-crf", crf.ToString(CultureInfo.InvariantCulture),
 
@@ -93,6 +118,8 @@ public static class FfmpegArguments
 
             // Видео беззвучно не заканчивается: без -shortest ffmpeg ждал бы конца потока.
             "-shortest",
+
+            .. videoCodec == HevcCodec ? HevcMp4Tag : [],
             outputPath
         ];
     }

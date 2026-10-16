@@ -16,8 +16,10 @@ namespace AudioVisualizer.Tests.Export;
 /// </remarks>
 public class Mp4ExporterTests
 {
-    [Fact]
-    public async Task ВыгрузкаСекунды_ДаётMp4СВидеоИЗвуком()
+    [Theory]
+    [InlineData("libx264", "avc1")]
+    [InlineData("libx265", "hvc1")]
+    public async Task ВыгрузкаСекунды_ДаётMp4СВидеоИЗвуком(string videoCodec, string expectedTag)
     {
         var ffmpeg = new FfmpegLocator().Locate();
 
@@ -38,6 +40,7 @@ public class Mp4ExporterTests
                     Width = 320,
                     Height = 240,
                     FramesPerSecond = 15,
+                    VideoCodec = videoCodec,
                     Crf = 30,
                     CodecPreset = "ultrafast",
                     AudioBitrateKbps = 64,
@@ -65,8 +68,9 @@ public class Mp4ExporterTests
 
             // Из-за -movflags +faststart описание потоков стоит в начале файла. Без него можно
             // было бы получить видео без звука или наоборот и не заметить этого по размеру.
+            // Тег дорожки приходит из кодека, поэтому он и разный: avc1 у H.264, hvc1 у H.265.
             var head = System.Text.Encoding.ASCII.GetString(bytes, 0, Math.Min(bytes.Length, 64 * 1024));
-            Assert.Contains("avc1", head, StringComparison.Ordinal);
+            Assert.Contains(expectedTag, head, StringComparison.Ordinal);
             Assert.Contains("mp4a", head, StringComparison.Ordinal);
         }
         finally

@@ -91,6 +91,7 @@ public static class SettingsNormalizer
 
         var preset = export.CodecPreset?.Trim().ToLowerInvariant();
         var coder = export.AacCoder?.Trim().ToLowerInvariant();
+        var videoCodec = export.VideoCodec?.Trim().ToLowerInvariant();
 
         return export with
         {
@@ -98,6 +99,9 @@ public static class SettingsNormalizer
             Width = ToEven(Math.Clamp(export.Width, 64, 7680)),
             Height = ToEven(Math.Clamp(export.Height, 64, 7680)),
             FramesPerSecond = Math.Clamp(export.FramesPerSecond, 1, 240),
+            VideoCodec = videoCodec is not null && ExportSettings.VideoCodecs.Contains(videoCodec, StringComparer.OrdinalIgnoreCase)
+                ? videoCodec
+                : ExportSettings.DefaultVideoCodec,
             Crf = Math.Clamp(export.Crf, 0, 51),
             CodecPreset = preset is not null && CodecPresets.Contains(preset, StringComparer.OrdinalIgnoreCase) ? preset : "medium",
             AudioBitrateKbps = Math.Clamp(export.AudioBitrateKbps, 32, 320),

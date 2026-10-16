@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -6,6 +6,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+
+    <!--
+      Иконка встраивается в exe как ресурс Win32, и её получают проводник, панель задач,
+      Alt-Tab и заголовок окна. Свойство Icon у окна задавать не нужно: WPF и так берёт
+      иконку сборки, а объявлять .ico ресурсом WPF пришлось бы только ради ссылки на него
+      из разметки, которой здесь нет.
+    -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

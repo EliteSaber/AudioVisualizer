@@ -43,17 +43,46 @@ public partial class ThemeResourceTests
         Assert.True(duplicates.Length == 0, "Ключи ресурсов повторяются: " + string.Join(", ", duplicates));
     }
 
-    [Fact]
-    public void КистиОбъявлены_ИКаждаяИспользуется()
+[Fact]
+    public void ОшибкаВСтатусе_Покрашена()
     {
-        var markup = AppXaml();
+        var window = MainWindowMarkup();
+
+        // Кисть объявлена, а строка статуса переключается на неё по признаку модели: иначе
+        // ошибка выглядела бы так же, как обычное сообщение, и её было бы не видать.
+        Assert.Contains("StatusErrorBrush", window, StringComparison.Ordinal);
+        Assert.Contains("IsStatusError", window, StringComparison.Ordinal);
+        Assert.Contains("DataTrigger", window, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void КистьОшибкиОбъявлена()
+    {
+        // Отдельная проверка вместо общей: кисть в App.xaml есть всегда, а вот применять её
+        // должна строка статуса - и без DataTrigger общая проверка молча бы прошла.
+        Assert.Contains("x:Key=\"StatusErrorBrush\"", AppXaml(), StringComparison.Ordinal);
+    }
+
+    private static string MainWindowMarkup()
+        => File.ReadAllText(Path.Combine(AppRoot(), "MainWindow.xaml"));
+
+    [Fact]
+    public void КистиОбъявлены_КаждаяИспользуется()
+    {
+        // Объявления читаются из App.xaml, а использование ищется по всей разметке: кисть,
+        // объявленная один раз и применённая в другом файле, - самый обычный случай, а не
+        // забытая краска. Искать применение только внутри App.xaml означало бы ругаться на
+        // StatusErrorBrush, которая нужна окну, а не самому словарю.
+        var declarations = AppXaml();
+        var usage = string.Join(Environment.NewLine, MarkupFiles().Select(File.ReadAllText));
+
         var declared = BrushPattern()
-            .Matches(markup)
+            .Matches(declarations)
             .Select(match => match.Groups["key"].Value)
             .ToArray();
 
         Assert.NotEmpty(declared);
-        Assert.All(declared, key => Assert.Contains(key, markup, StringComparison.Ordinal));
+        Assert.All(declared, key => Assert.Contains(key, usage, StringComparison.Ordinal));
     }
 
     [Fact]

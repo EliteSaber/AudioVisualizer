@@ -534,10 +534,25 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="180" />
             </Grid.ColumnDefinitions>
+            <!--
+                    Ошибки красные, остальные сообщения обычные. Признак берётся у модели окна:
+                    DataContext у этой надписи и есть MainViewModel, поэтому ссылка без
+                    RelativeSource разрешается сама собой.
+                -->
             <TextBlock VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis"
-                       Foreground="{StaticResource MutedTextBrush}"
-                       Text="{Binding Status}" />
+                       Text="{Binding Status}">
+                <TextBlock.Style>
+                    <Style TargetType="{x:Type TextBlock}">
+                        <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource StatusErrorBrush}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
             <ProgressBar Grid.Column="1"
                          Height="4"
                          IsIndeterminate="True"

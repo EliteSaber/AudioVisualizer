@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AudioVisualizer.App.ViewModels;
 using AudioVisualizer.Core.Audio;
 using AudioVisualizer.Core.Settings;
@@ -55,6 +56,111 @@ public class MainViewModelTests
 
         Assert.DoesNotContain("сохранить", viewModel.Status, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void ПравкаНастройки_СтавитЗаписьВОчередьНоНеПишетФайл()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            // Главная проверка отложенной записи: правка не должна писать файл сразу, иначе
+            // жест ползунка переписывал бы его десятки раз в секунду.
+            viewModel.Settings.BarWidth = 17;
+
+            Assert.True(viewModel.SavePending);
+            Assert.Equal(AppSettings.Default.Bars.Width, ReadWidth(directory.File("settings.json")));
+        }
+    }
+
+    [Fact]
+    public void FlushSave_ПишетФайлИСнимаетОчередь()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            viewModel.Settings.BarWidth = 17;
+            viewModel.FlushSave();
+
+            Assert.False(viewModel.SavePending);
+            Assert.Equal(17, ReadWidth(directory.File("settings.json")));
+
+            // Второй выпуск ничего не пишет: очередь уже снята.
+            viewModel.Settings.BarWidth = 19;
+            viewModel.Settings.BarWidth = 17;
+            viewModel.FlushSave();
+
+            Assert.Equal(17, ReadWidth(directory.File("settings.json")));
+        }
+    }
+
+    [Fact]
+    public void СбросНастроек_ТожеСтавитЗаписьВОчередь()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            // Сброс идёт через Apply, который поднимает Changed один раз в конце. Если это
+            // перестанет происходить, сброс перестанет сохраняться до выхода из окна - и
+            // будет выглядеть как «иногда сбрасывается, иногда нет».
+            viewModel.Settings.BarWidth = 17;
+            viewModel.ResetSettingsCommand.Execute(null);
+
+            Assert.True(viewModel.SavePending);
+        }
+    }
+
+    [Fact]
+    public async Task ПовторныйОтказСохранить_СтрокуНеПеретирает()
+    {
+        using var directory = new TemporaryDirectory();
+        var viewModel = new MainViewModel(new AppSettingsStore(Path.Combine(directory.Root, "нет", "settings.json")));
+
+        viewModel.SaveSettingsCommand.Execute(null);
+        Assert.True(viewModel.IsStatusError);
+
+        using var sine = SineWav();
+        await viewModel.LoadFileAsync(sine.Path);
+        var status = viewModel.Status;
+        Assert.False(viewModel.IsStatusError);
+
+        // Второй отказ молчит: текст появляется один раз на сбой, а не на каждую правку,
+        // иначе он бы затирал сведения о треке.
+        viewModel.SaveSettingsCommand.Execute(null);
+
+        Assert.Equal(status, viewModel.Status);
+    }
+
+    [Fact]
+    public void УспешноеСохранение_СнимаетОтметкуОбОтказе()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            viewModel.SaveSettingsCommand.Execute(null);
+
+            Assert.False(viewModel.IsStatusError);
+        }
+    }
+
+    [Fact]
+    public async Task ОшибкаОткрытияФайла_КраситСтрокуАОбычноеСообщениеГасит()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            // Неудача - красная строка, а обычное сообщение про трек её гасит: иначе красный
+            // цвет остался бы от прежней ошибки навсегда.
+            await viewModel.LoadFileAsync(@"Z:\нет\такого.mp3");
+            Assert.True(viewModel.IsStatusError);
+
+using var sine = SineWav();
+            await viewModel.LoadFileAsync(sine.Path);
+            Assert.False(viewModel.IsStatusError);
+        }
+    }
+
+    private static int ReadWidth(string path)
+        => JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path)).GetProperty("Bars").GetProperty("Width").GetInt32();
 
     [Fact]
     public void Создание_БерётНастройкиИзФайла()

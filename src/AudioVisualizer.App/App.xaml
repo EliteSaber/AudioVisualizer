@@ -49,6 +49,7 @@
         <SolidColorBrush x:Key="PanelBorder" Color="#FF45454D" />
         <SolidColorBrush x:Key="TextBrush" Color="#FFE2E2E6" />
         <SolidColorBrush x:Key="MutedTextBrush" Color="#FF9A9AA4" />
+        <SolidColorBrush x:Key="StatusErrorBrush" Color="#FFE05C5C" />
         <SolidColorBrush x:Key="ControlBackground" Color="#FF3A3A42" />
         <SolidColorBrush x:Key="SelectionBackground" Color="#FF2F6FD0" />
         <SolidColorBrush x:Key="SelectionText" Color="#FFFFFFFF" />

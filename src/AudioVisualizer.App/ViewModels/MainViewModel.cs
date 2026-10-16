@@ -30,6 +30,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private const int MaximumFramesPerSecond = 60;
 
+    /// <summary>Пауза после последней правки, через которую пишется файл настроек.</summary>
+    private static readonly TimeSpan SaveDelay = TimeSpan.FromSeconds(10);
+
     /// <summary>Меньше этой разницы перемотка считается щелчком по бегунку без переноса.</summary>
     private const double MinimumSeekDeltaSeconds = 0.05d;
 
@@ -42,10 +45,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private SpectrumFrameSource? _frames;
     private string? _audioPath;
     private DispatcherTimer? _timer;
+    private DispatcherTimer? _saveTimer;
     private CancellationTokenSource? _exportCancellation;
     private VideoExportProgress? _progress;
     private bool _isCancelling;
     private bool _isScrubbing;
+    private bool _saveFailed;
+
+    /// <summary>Ждёт своей очереди запись: правки есть, а файл с ними ещё не записан.</summary>
+    internal bool SavePending { get; private set; }
 
     public MainViewModel(
         AppSettingsStore? store = null,
@@ -75,6 +83,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _fileTitle = "Файл не выбран";
 
     [ObservableProperty] private string _status = "Откройте аудиофайл, чтобы увидеть спектр.";
+
+    /// <summary>Ошибка в строке статуса: она красится красным, пока не придёт обычное сообщение.</summary>
+    [ObservableProperty] private bool _isStatusError;
 
     [ObservableProperty] private bool _isBusy;
 
@@ -145,6 +156,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public Action<Notice>? NoticeRequested { get; set; }
 
+/// <summary>
+    /// Пишет сообщение в строку статуса и сразу помечает его ошибкой или нет. Через один
+    /// метод, а не присваиванием напрямую: обычное сообщение обязано гасить красный цвет
+    /// предыдущей ошибки, а забытое присваивание оставило бы её навсегда.
+    /// </summary>
+    private void SetStatus(string text, bool isError = false)
+    {
+        Status = text;
+        IsStatusError = isError;
+    }
+
     /// <summary>
     /// Собирает отчёт об ошибке и отдаёт его в строку статуса и окну. Строка остаётся на
     /// месте: после закрытия окна текст всё равно должен быть виден, и по нему же проверяют
@@ -154,7 +176,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         var notice = new Notice(title, exception.Message);
 
-        Status = $"{notice.Title}: {notice.Message}";
+        SetStatus($"{notice.Title}: {notice.Message}", isError: true);
 
         // Все четыре места вызова живут на потоке интерфейса: два в обработчиках команд,
         // два в продолжениях await, которые возвращаются на SynchronizationContext окна.
@@ -187,12 +209,61 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void SaveSettings()
     {
-        // Об успехе сообщать нечем: это обычный порядок вещей, и надписывать «сохранено»
-        // после каждого выхода незачем. Об неудаче - нужно: иначе настройки молча теряются.
-        if (!_store.Save(Settings.ToAppSettings(), out var failure))
+        if (_store.Save(Settings.ToAppSettings(), out var failure))
         {
-            Status = "Не удалось сохранить настройки: " + failure;
+            _saveFailed = false;
+
+            return;
         }
+
+        // Отказ повторялся бы на каждой правке и затирал бы сведения о треке, поэтому текст
+        // появляется только на переходе «работало → сломалось». Об успехе не сообщаем вовсе:
+        // это обычный порядок вещей.
+        if (!_saveFailed)
+        {
+            SetStatus("Не удалось сохранить настройки: " + failure, isError: true);
+        }
+
+        _saveFailed = true;
+    }
+
+    /// <summary>
+    /// Ставит отложенную запись. Правки идут десятками раз в секунду, а перезаписывать файл
+    /// на каждое движение ползунка нельзя. Пауза отсчитывается заново при каждой правке,
+    /// поэтому жест ползунка даёт одну запись в конце, а не одну на каждое событие.
+    /// </summary>
+    private void ScheduleSave()
+    {
+        SavePending = true;
+
+        _saveTimer ??= CreateSaveTimer();
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    /// <summary>
+    /// Пишет настройки, если правки ждали своей очереди. Очередь снимается до записи: иначе
+    /// неудачная попытка осталась бы висеть и повторялась бы на каждом щелчке таймера.
+    /// </summary>
+    internal void FlushSave()
+    {
+        if (!SavePending)
+        {
+            return;
+        }
+
+        SavePending = false;
+        SaveSettings();
+    }
+
+    private DispatcherTimer CreateSaveTimer()
+    {
+        // Background, а не Render как у превью: запись двух килобайт не должна отбирать кадры
+        // у столбиков.
+        var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = SaveDelay };
+        timer.Tick += (_, _) => FlushSave();
+
+        return timer;
     }
 
     [RelayCommand]
@@ -264,7 +335,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         if (_audio is null)
         {
-            Status = "Сначала откройте аудиофайл.";
+            SetStatus("Сначала откройте аудиофайл.");
             return;
         }
 
@@ -285,7 +356,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ExportProgress = 0d;
         IsExporting = true;
         IsBusy = true;
-        Status = $"Выгрузка {Path.GetFileName(outputPath)}...";
+        SetStatus($"Выгрузка {Path.GetFileName(outputPath)}...");
 
         try
         {
@@ -296,12 +367,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
             if (result.Cancelled)
             {
-                Status = "Выгрузка отменена.";
+                SetStatus("Выгрузка отменена.");
                 return;
             }
 
             ExportProgress = 1d;
-            Status = $"Готово: {result.Frames} кадров за {result.Elapsed:mm\\:ss}, {Path.GetFileName(result.Path)}";
+            SetStatus($"Готово: {result.Frames} кадров за {result.Elapsed:mm\\:ss}, {Path.GetFileName(result.Path)}");
 
             // Окно об успехе тоже легко пропустить: строка статуса одна, она мелькает и
             // остаётся в углу. Но галочка «тихая выгрузка» его отключает - кому не надо
@@ -351,7 +422,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             SetPosition(0d);
             IsPlaying = false;
             HasTrack = true;
-            Status = $"{FileTitle}: {audio.Duration:mm\\:ss}, {audio.SampleRate} Гц, каналы сведены в моно";
+            SetStatus($"{FileTitle}: {audio.Duration:mm\\:ss}, {audio.SampleRate} Гц, каналы сведены в моно");
             UpdatePreview();
         }
         catch (Exception exception) when (exception is AudioDecodeException or FileNotFoundException or IOException)
@@ -528,6 +599,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnSettingsChanged(object? sender, EventArgs e)
     {
+        // Запись отложенная: правка приходит на каждое движение ползунка, а файл на то
+        // движение перезаписывать нельзя. При выходе из окна очередь всё равно допишется.
+        ScheduleSave();
+
         var settings = SettingsNormalizer.Normalize(Settings.ToAppSettings());
 
         PreviewWidth = settings.Export.Width;
@@ -609,6 +684,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _exportCancellation = null;
 
         StopTimer();
+
+        if (_saveTimer is not null)
+        {
+            _saveTimer.Stop();
+        }
+
         _player.Dispose();
 
         GC.SuppressFinalize(this);

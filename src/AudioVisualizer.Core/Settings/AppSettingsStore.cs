@@ -58,7 +58,11 @@ public sealed class AppSettingsStore
         return loaded is null ? SettingsNormalizer.Normalize(new AppSettings()) : SettingsNormalizer.Normalize(loaded);
     }
 
-    public bool Save(AppSettings settings)
+    /// <summary>
+    /// Пишет настройки. При неудаче отдаёт причину: раньше она молча терялась, и о том, что
+    /// файл не записан, пользователь узнавал только при следующем запуске.
+    /// </summary>
+    public bool Save(AppSettings settings, out string? failure)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -66,13 +70,19 @@ public sealed class AppSettingsStore
         {
             File.WriteAllText(_path, JsonSerializer.Serialize(SettingsNormalizer.Normalize(settings), WriteOptions));
 
+            failure = null;
+
             return true;
         }
         catch (Exception exception) when (IsFileProblem(exception))
         {
+            failure = exception.Message;
+
             return false;
         }
     }
+
+    public bool Save(AppSettings settings) => Save(settings, out _);
 
     private AppSettings? TryRead()
     {

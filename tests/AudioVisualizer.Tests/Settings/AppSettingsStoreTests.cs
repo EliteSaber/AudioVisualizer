@@ -19,6 +19,29 @@ public class AppSettingsStoreTests
     };
 
     [Fact]
+    public void Save_ОтдаётПричинуНеудачи()
+    {
+        using var directory = new TemporaryDirectory();
+
+        // Путь в несуществующем каталоге: запись не выйдет, и молчать об этом нельзя -
+        // пользователь узнал бы о потере настроек только при следующем запуске.
+        var store = new AppSettingsStore(Path.Combine(directory.Root, "нет", "settings.json"));
+
+        Assert.False(store.Save(AppSettings.Default, out var failure));
+        Assert.False(string.IsNullOrWhiteSpace(failure));
+    }
+
+    [Fact]
+    public void Save_УспехНеДаётПричины()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new AppSettingsStore(directory.File("settings.json"));
+
+        Assert.True(store.Save(AppSettings.Default, out var failure));
+        Assert.Null(failure);
+    }
+
+    [Fact]
     public void Load_БезФайла_СоздаётФайлИВозвращаетУмолчания()
     {
         using var directory = new TemporaryDirectory();

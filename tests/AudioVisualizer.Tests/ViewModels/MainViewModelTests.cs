@@ -31,6 +31,32 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void НеудачноеСохранение_ПишетВСтатус()
+    {
+        using var directory = new TemporaryDirectory();
+
+        // Запись идёт в несуществующий каталог: раньше причина молча терялась, и о том, что
+        // настройки не записаны, можно было узнать только при следующем запуске.
+        var viewModel = new MainViewModel(new AppSettingsStore(Path.Combine(directory.Root, "нет", "settings.json")));
+
+        viewModel.SaveSettingsCommand.Execute(null);
+
+        Assert.Contains("Не удалось сохранить настройки", viewModel.Status, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void УспешноеСохранение_СтатусНеМеняет()
+    {
+        var (viewModel, directory) = CreateViewModel();
+
+        // Об успехе сообщать нечем: это обычный порядок вещей, и надпись после каждого выхода
+        // только занимала бы строку статуса.
+        viewModel.SaveSettingsCommand.Execute(null);
+
+        Assert.DoesNotContain("сохранить", viewModel.Status, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Создание_БерётНастройкиИзФайла()
     {
         var (viewModel, directory) = CreateViewModel(AppSettings.Default with { Bars = new BarSettings { Width = 21 } });

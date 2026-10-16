@@ -59,15 +59,13 @@
                            Text="{Binding FileTitle}" />
             </StackPanel>
 
+            <!--
+                Кнопки «сохранить» нет: настройки и так пишутся при выходе из окна, и
+                состояния «несохранённые правки» не существует. Перезаписывать файл вручную
+                незачем, а нажатие без видимого результата только путает.
+            -->
             <StackPanel Grid.Column="2" Margin="24,0,0,0" Orientation="Horizontal">
                 <Button Style="{StaticResource IconButton}"
-                        Command="{Binding SaveSettingsCommand}"
-                        ToolTip="Сохранить настройки"
-                        AutomationProperties.Name="Сохранить настройки">
-                    <Path Style="{StaticResource IconPath}" Data="{StaticResource IconSave}" />
-                </Button>
-                <Button Margin="8,0,0,0"
-                        Style="{StaticResource IconButton}"
                         Command="{Binding ResetSettingsCommand}"
                         ToolTip="Сбросить все настройки"
                         AutomationProperties.Name="Сбросить все настройки">

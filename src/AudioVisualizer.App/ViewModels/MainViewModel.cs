@@ -180,8 +180,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Пишет настройки в файл. Кнопки в панели нет: то же самое происходит при выходе из
+    /// окна, и отдельная кнопка только перезаписывала бы файл вручную.
+    /// </summary>
     [RelayCommand]
-    private void SaveSettings() => _store.Save(Settings.ToAppSettings());
+    private void SaveSettings()
+    {
+        // Об успехе сообщать нечем: это обычный порядок вещей, и надписывать «сохранено»
+        // после каждого выхода незачем. Об неудаче - нужно: иначе настройки молча теряются.
+        if (!_store.Save(Settings.ToAppSettings(), out var failure))
+        {
+            Status = "Не удалось сохранить настройки: " + failure;
+        }
+    }
 
     [RelayCommand]
     private void ResetSettings() => Settings.Apply(SettingsNormalizer.Normalize(new AppSettings()));

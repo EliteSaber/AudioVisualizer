@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using AudioVisualizer.Core.Export;
 using AudioVisualizer.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,15 +14,23 @@ namespace AudioVisualizer.App.ViewModels;
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ExportPresetStore _presetStore;
+    private readonly IVideoEncoderDetector _encoderDetector;
 
     private bool _suppressChanged;
     private bool _applyingPreset;
 
-    public SettingsViewModel(AppSettings settings, ExportPresetStore? presetStore = null)
+    public SettingsViewModel(
+        AppSettings settings,
+        ExportPresetStore? presetStore = null,
+        IVideoEncoderDetector? encoderDetector = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
         _presetStore = presetStore ?? new ExportPresetStore();
+
+        // В приложении зонд один на всё окно: панель и выгрузка спрашивают одно и то же, а
+        // каждая проба - это запуск процесса, поэтому второй раз её запускать незачем.
+        _encoderDetector = encoderDetector ?? new VideoEncoderDetector();
 
         // Встроенные идут первыми и не удаляются: свой пресет с тем же именем заменяет
         // встроенный на месте, а не добавляется вторым пунктом с тем же именем.
@@ -65,6 +74,17 @@ public sealed partial class SettingsViewModel : ObservableObject
     public ObservableCollection<EqualizerBandViewModel> Equalizer { get; } = [];
 
     /// <summary>
+    /// Чем кодируется видео. Первые два пункта есть всегда, найденные вендоры добавляются
+    /// зондом: показывать видеокарту, которой на машине нет, незачем, а вот молча убрать
+    /// выбранную нельзя - она остаётся в списке с пометкой «не найдена».
+    /// </summary>
+    public ObservableCollection<Choice<string>> EncoderChoices { get; } =
+    [
+        new(ExportSettings.SoftwareVideoEncoder, "Программно (процессор)"),
+        new(ExportSettings.AutoVideoEncoder, "Авто — видеокарта, если есть")
+    ];
+
+    /// <summary>
     /// Пресеты выгрузки: сначала встроенные, потом сохранённые пользователем. Коллекция
     /// меняется на месте, а не пересоздаётся - иначе выбранный пункт списка теряется.
     /// </summary>
@@ -84,6 +104,29 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>Заметка о последней операции с пресетами: пустая, если всё прошло.</summary>
     [ObservableProperty] private string _presetsMessage = string.Empty;
+
+    /// <summary>Идёт ли проба видеокарты. Пока она идёт, в списке только два пункта.</summary>
+    [ObservableProperty] private bool _isDetectingEncoders;
+
+    /// <summary>
+    /// Что нашлось или почему ничего: пустая строка, когда всё в порядке и видеокарта есть.
+    /// </summary>
+    [ObservableProperty] private string _encodersMessage = string.Empty;
+
+    /// <summary>
+    /// Есть ли чему занимать строку под списком. Сама строка без этого свойства оставалась бы
+    /// на месте пустой и держала бы место: при найденной видеокарте сообщения нет вовсе, а
+    /// блок с отступом всё равно занимал бы высоту.
+    /// </summary>
+    public bool HasEncodersMessage => !string.IsNullOrEmpty(EncodersMessage);
+
+    private bool _refreshingEncoders;
+
+    /// <summary>Идёт ли сборка списка кодировщиков: записи из привязки на это время игнорируются.</summary>
+    private bool _fillingEncoders;
+
+    /// <summary>Идёт ли возврат выбора после сборки списка: это не правка, и пресет она не сбрасывает.</summary>
+    private bool _restoringEncoder;
 
     public bool CanDeleteExportPreset => SelectedExportPreset?.Custom == true;
 
@@ -120,6 +163,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private int _exportWidth;
     [ObservableProperty] private int _exportHeight;
     [ObservableProperty] private int _exportFramesPerSecond;
+    [ObservableProperty] private string _videoEncoder = ExportSettings.DefaultVideoEncoder;
     [ObservableProperty] private string _videoCodec = ExportSettings.DefaultVideoCodec;
     [ObservableProperty] private int _crf;
     [ObservableProperty] private string _codecPreset = "medium";
@@ -191,6 +235,11 @@ CenterGap = BarCenterGap,
             Width = ExportWidth,
             Height = ExportHeight,
             FramesPerSecond = ExportFramesPerSecond,
+            // Пустое значение в файл не пишется: нормализация молча превратила бы его в
+            // «программно», и выбранный кодировщик потерялся бы до следующего перезапуска.
+            VideoEncoder = string.IsNullOrWhiteSpace(VideoEncoder)
+                ? ExportSettings.DefaultVideoEncoder
+                : VideoEncoder,
             VideoCodec = VideoCodec,
             Crf = Crf,
             CodecPreset = CodecPreset,
@@ -242,6 +291,7 @@ BarCenterGap = settings.Bars.CenterGap;
             ExportWidth = settings.Export.Width;
             ExportHeight = settings.Export.Height;
             ExportFramesPerSecond = settings.Export.FramesPerSecond;
+            VideoEncoder = settings.Export.VideoEncoder;
             VideoCodec = settings.Export.VideoCodec;
             Crf = settings.Export.Crf;
             CodecPreset = settings.Export.CodecPreset;
@@ -266,9 +316,11 @@ BarCenterGap = settings.Bars.CenterGap;
 
         // Правка любого параметра ролика означает, что пресет больше не описывает текущие
         // настройки. Путь к ffmpeg в список не входит, поэтому его правка выбор не сбрасывает.
-        if (e.PropertyName is nameof(ExportWidth)
+        // Сборка списка кодировщиков тоже не должна: она доставляет то же значение обратно.
+        if (!_restoringEncoder && e.PropertyName is nameof(ExportWidth)
             or nameof(ExportHeight)
             or nameof(ExportFramesPerSecond)
+            or nameof(VideoEncoder)
             or nameof(VideoCodec)
             or nameof(Crf)
             or nameof(CodecPreset)
@@ -293,6 +345,159 @@ BarCenterGap = settings.Bars.CenterGap;
         {
             Changed?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    /// <summary>
+    /// Ищет кодировщики видеокарты и наполняет ими список. Зовётся при открытии вкладки
+    /// «Экспорт» и сам собой после смены кодека или пути к ffmpeg.
+    /// </summary>
+    public async Task RefreshEncodersAsync(CancellationToken cancellationToken = default)
+    {
+        // Вкладку открывают подряд, а проба стоит запусков процессов. Второй раз за то же
+        // самое ждать незачем, и второй вызов просто выходит.
+        if (_refreshingEncoders)
+        {
+            return;
+        }
+
+        _refreshingEncoders = true;
+        IsDetectingEncoders = true;
+        EncodersMessage = "Проверяем видеокарту…";
+
+        try
+        {
+            var detection = await _encoderDetector
+                .DetectAsync(FfmpegPath, VideoCodec, cancellationToken)
+                .ConfigureAwait(true);
+
+            FillEncoderChoices(detection);
+        }
+        catch (OperationCanceledException)
+        {
+            // Закрытие окна во время пробы - обычное дело, а не ошибка настроек.
+            EncodersMessage = string.Empty;
+        }
+        catch (Exception)
+        {
+            // Зонд не должен ронять панель: список просто останется из двух пунктов, а о том,
+            // что ffmpeg нет, выгрузка скажет сама и внятнее.
+            EncodersMessage = "Проверить видеокарту не удалось.";
+        }
+        finally
+        {
+            IsDetectingEncoders = false;
+            _refreshingEncoders = false;
+        }
+    }
+
+    private void FillEncoderChoices(VideoEncoderDetection detection)
+    {
+        var found = detection.Supported;
+
+        // Значение берётся до касания коллекции: очистка списка обнуляет его в привязке, и
+        // опереться на свойство после этого нельзя - оно там уже другое.
+        var current = string.IsNullOrWhiteSpace(VideoEncoder) ? ExportSettings.DefaultVideoEncoder : VideoEncoder;
+
+        _fillingEncoders = true;
+
+        try
+        {
+            EncoderChoices.Clear();
+            EncoderChoices.Add(new Choice<string>(ExportSettings.SoftwareVideoEncoder, "Программно (процессор)"));
+            EncoderChoices.Add(new Choice<string>(ExportSettings.AutoVideoEncoder, "Авто — видеокарта, если есть"));
+
+            foreach (var support in found)
+            {
+                EncoderChoices.Add(new Choice<string>(support.Vendor, support.Title));
+            }
+
+            // Выбранного вендора в списке может не оказаться: карту унесли, или её не было, или
+            // сменился путь к ffmpeg. Убрать выбор значило бы сбросить настройку молча, поэтому он
+            // остаётся в списке с пометкой - иначе непонятно, куда делся выбор из файла настроек.
+            var missing = VideoEncoderDetector.Vendors
+                .FirstOrDefault(vendor =>
+                    string.Equals(vendor.Vendor, current, StringComparison.Ordinal)
+                    && found.All(support => !string.Equals(support.Vendor, vendor.Vendor, StringComparison.Ordinal)));
+
+            if (missing is not null)
+            {
+                EncoderChoices.Add(new Choice<string>(missing.Vendor, $"{missing.Title} (не найдена)"));
+            }
+        }
+        finally
+        {
+            _fillingEncoders = false;
+        }
+
+        // Значение возвращается и отправляется подписке ещё раз: после очистки списка цель
+        // привязки осталась в null, и без уведомления поле было бы пустым при верном свойстве.
+        // Отправка помечена как восстановление: это доставка того же значения в список, а не
+        // правка человеком, и переопределение OnPropertyChanged по ней не сбрасывает пресет.
+        _restoringEncoder = true;
+
+        try
+        {
+            VideoEncoder = current;
+            OnPropertyChanged(nameof(VideoEncoder));
+        }
+        finally
+        {
+            _restoringEncoder = false;
+        }
+
+        EncodersMessage = DescribeDetection(detection);
+    }
+
+    /// <summary>
+    /// Что сказать под списком. Пустой ответ разбирается на две разные причины: нет ffmpeg —
+    /// это вопрос к пути в настройках, а нет видеокарты — вопрос к железу. Раньше обе причины
+    /// выглядели одинаково, и потерявшийся из PATH ffmpeg объявлялся отсутствием видеокарты.
+    /// </summary>
+    private static string DescribeDetection(VideoEncoderDetection detection)
+    {
+        if (detection.Supported.Count > 0)
+        {
+            return string.Empty;
+        }
+
+        return detection.FfmpegAvailable
+            ? "Видеокарта с кодировщиком не найдена: кодировать будет процессор."
+            : "ffmpeg не найден: проверьте путь к нему выше, кодировать на видеокарте нечем.";
+    }
+
+    /// <summary>Кодировщик привязан к коду и к ffmpeg, поэтому смена любого из них требует новой пробы.</summary>
+    partial void OnVideoCodecChanged(string value) => RequestEncoderRefresh();
+
+    partial void OnFfmpegPathChanged(string value) => RequestEncoderRefresh();
+
+    partial void OnEncodersMessageChanged(string value) => OnPropertyChanged(nameof(HasEncodersMessage));
+
+    /// <summary>
+    /// Список пересобирается на ходу, и ComboBox на очистке приводит значение в null, а двусторонней
+    /// привязкой это null попадает в настройку. Пока список собирается, запись игнорируется: выбор
+    /// возвращается в <see cref="FillEncoderChoices"/> сразу после сборки.
+    /// </summary>
+    partial void OnVideoEncoderChanged(string value)
+    {
+        if (_fillingEncoders)
+        {
+            return;
+        }
+
+        RequestEncoderRefresh();
+    }
+
+    private void RequestEncoderRefresh()
+    {
+        // Программная правка настроек (Apply, выбор пресета) не должна дёргать зонд: список
+        // и так наполняется при открытии вкладки, а лишний запуск процессов на каждый
+        // пересозданный пресет - это десятки миллисекунд впустую.
+        if (_suppressChanged)
+        {
+            return;
+        }
+
+        _ = RefreshEncodersAsync(CancellationToken.None);
     }
 
     /// <summary>Показывает поле ввода имени с текущим размером в качестве подсказки.</summary>
@@ -414,6 +619,7 @@ BarCenterGap = settings.Bars.CenterGap;
             ExportWidth = export.Width;
             ExportHeight = export.Height;
             ExportFramesPerSecond = export.FramesPerSecond;
+            VideoEncoder = export.VideoEncoder;
             VideoCodec = export.VideoCodec;
             Crf = export.Crf;
             CodecPreset = export.CodecPreset;

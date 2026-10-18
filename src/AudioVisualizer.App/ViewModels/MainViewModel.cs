@@ -60,14 +60,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         AudioLoader? loader = null,
         IAudioPlayer? player = null,
         IVideoExporter? exporter = null,
-        ExportPresetStore? presetStore = null)
+        ExportPresetStore? presetStore = null,
+        IVideoEncoderDetector? encoderDetector = null)
     {
         _store = store ?? new AppSettingsStore();
         _loader = loader ?? new AudioLoader();
         _player = player ?? new AudioPlayer();
-        _exporter = exporter ?? new Mp4Exporter();
 
-        Settings = new SettingsViewModel(_store.Load(), presetStore);
+        // Зонд один на панель и выгрузку: обеим нужен один и тот же ответ про видеокарту, а
+        // каждая проба - это запуски ffmpeg.
+        var detectors = encoderDetector ?? new VideoEncoderDetector();
+        _exporter = exporter ?? new Mp4Exporter(encoderDetector: detectors);
+
+        Settings = new SettingsViewModel(_store.Load(), presetStore, detectors);
         Settings.Changed += OnSettingsChanged;
 
         PreviewWidth = Settings.ExportWidth;
@@ -174,6 +179,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// Подробности для подсказки. Снимается на каждом сообщении, иначе подсказка от прежней
     /// ошибки осталась бы висеть под обычным текстом.
     /// </param>
+    /// <summary>
+    /// Чем кодировалось — в подсказку строки статуса. При обычном программном кодировании
+    /// пусто: сообщать о том, что и так выбрано, незачем, и подсказка остаётся для деталей.
+    /// </summary>
+    private static string DescribeEncoder(VideoExportResult result)
+    {
+        if (!string.IsNullOrEmpty(result.Encoder))
+        {
+            return $"Кодировала видеокарта ({result.Encoder}).";
+        }
+
+        return result.FellBackToCpu
+            ? "Кодировал процессор: видеокарта не нашлась или не умеет выбранный кодек."
+            : string.Empty;
+    }
+
     private void SetStatus(string text, bool isError = false, string? detail = null)
     {
         Status = text;
@@ -390,7 +411,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             }
 
             ExportProgress = 1d;
-            SetStatus($"Готово: {result.Frames} кадров за {result.Elapsed:mm\\:ss}, {Path.GetFileName(result.Path)}");
+
+            // Чем кодировалось, в строку статуса не влезает: она и так переполнена именем
+            // файла, и текст обрежется многоточием. Подсказка на строке — правильное место.
+            // Отход от видеокарты на процессор говорится отдельно: иначе настройка молча не
+            // сделала того, о чём просили, и это видно только по времени выгрузки.
+            SetStatus(
+                $"Готово: {result.Frames} кадров за {result.Elapsed:mm\\:ss}, {Path.GetFileName(result.Path)}",
+                detail: DescribeEncoder(result));
 
             // Окно об успехе тоже легко пропустить: строка статуса одна, она мелькает и
             // остаётся в углу. Но галочка «тихая выгрузка» его отключает - кому не надо

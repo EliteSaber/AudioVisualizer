@@ -184,9 +184,11 @@
                     Background="{StaticResource PanelBackground}"
                     BorderBrush="{StaticResource PanelBorder}"
                     BorderThickness="1">
-                <TabControl Margin="8"
+                <TabControl x:Name="SettingsTabs"
+                            Margin="8"
                             Background="{StaticResource PanelBackground}"
-                            BorderThickness="0">
+                            BorderThickness="0"
+                            SelectionChanged="OnSettingsTabChanged">
 
                     <!-- Цвета -->
                     <TabItem Header="Цвета">
@@ -274,7 +276,7 @@
                                     вершины того же цвета, что и столбик, и границы между ними
                                     не видно.
                                 -->
-                                <controls:SettingRow Label="{Binding Settings.BarTrailDensity, StringFormat={}Плотность следа: {0:0.00}}">
+                                <controls:SettingRow Label="{Binding Settings.BarTrailDensity, StringFormat={}Плотность: {0:0.00}}">
                                     <Slider Minimum="0" Maximum="1" TickFrequency="0.05"
                                             Value="{Binding Settings.BarTrailDensity, Mode=TwoWay}" />
                                 </controls:SettingRow>
@@ -367,7 +369,7 @@
                     </TabItem>
 
                     <!-- Экспорт -->
-                    <TabItem Header="Экспорт">
+                    <TabItem x:Name="ExportTab" Header="Экспорт">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,8,0,0">
                             <StackPanel>
                                 <TextBlock Text="Видео выгружается в mp4 (H.264 + AAC)." Style="{StaticResource SectionHeader}" />
@@ -436,9 +438,25 @@
                                 <controls:SettingRow Label="{Binding Settings.ExportHeight, StringFormat={}Высота: {0} px}">
                                     <Slider Minimum="240" Maximum="2160" Value="{Binding Settings.ExportHeight, Mode=TwoWay}" />
                                 </controls:SettingRow>
-                                <controls:SettingRow Label="{Binding Settings.ExportFramesPerSecond, StringFormat={}Кадров в секунду: {0}}">
+                                <controls:SettingRow Label="{Binding Settings.ExportFramesPerSecond, StringFormat={}Кадров: {0} к/с}">
                                     <Slider Minimum="1" Maximum="120" Value="{Binding Settings.ExportFramesPerSecond, Mode=TwoWay}" />
                                 </controls:SettingRow>
+                                <controls:SettingRow Label="Кодирование">
+                                    <ComboBox ItemsSource="{Binding Settings.EncoderChoices}"
+                                              ItemTemplate="{StaticResource ChoiceTemplate}"
+                                              SelectedValuePath="Value"
+                                              SelectedValue="{Binding Settings.VideoEncoder, Mode=TwoWay}" />
+                                </controls:SettingRow>
+                                <!--
+                                        Строка под списком скрывается, когда говорить нечего:
+                                        при найденной видеокарте сообщения нет вовсе, а пустой
+                                        блок с отступом всё равно держал бы высоту.
+                                    -->
+                                <TextBlock Margin="0,0,0,4"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="{Binding Settings.EncodersMessage}"
+                                           Visibility="{Binding Settings.HasEncodersMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <controls:SettingRow Label="Кодек видео"
                                                     ToolTip="H.265 — файл меньше, кодирование дольше">
                                     <ComboBox ItemsSource="{Binding Settings.VideoCodecChoices}"

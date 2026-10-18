@@ -236,6 +236,26 @@ public class SettingsNormalizerTests
     }
 
     [Fact]
+    public void Normalize_КодированиеВидео_ПриводитсяКИзвестному()
+    {
+        Assert.Equal("nvenc", SettingsNormalizer.NormalizeExport(new ExportSettings { VideoEncoder = " NVENC " }).VideoEncoder);
+        Assert.Equal("software", SettingsNormalizer.NormalizeExport(new ExportSettings { VideoEncoder = "vaapi" }).VideoEncoder);
+        Assert.Equal("software", SettingsNormalizer.NormalizeExport(new ExportSettings { VideoEncoder = null! }).VideoEncoder);
+    }
+
+    [Theory]
+    [InlineData("software")]
+    [InlineData("auto")]
+    [InlineData("nvenc")]
+    [InlineData("qsv")]
+    [InlineData("amf")]
+    public void Normalize_КодированиеВидео_КаждоеИзСпискаПроходит(string encoder)
+    {
+        Assert.Contains(encoder, ExportSettings.VideoEncoders);
+        Assert.Equal(encoder, SettingsNormalizer.NormalizeExport(new ExportSettings { VideoEncoder = encoder }).VideoEncoder);
+    }
+
+    [Fact]
     public void Normalize_ПутьКFfmpeg_ПустоеЗначениеСтановитсяNull()
     {
         Assert.Null(SettingsNormalizer.NormalizeExport(new ExportSettings { FfmpegPath = "   " }).FfmpegPath);

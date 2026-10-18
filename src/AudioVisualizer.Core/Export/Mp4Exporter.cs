@@ -43,6 +43,7 @@ public sealed class Mp4Exporter : IVideoExporter
 
     private readonly string? _pathVariable;
     private readonly TimeSpan _stallTimeout;
+    private readonly IVideoEncoderDetector _encoderDetector;
 
     /// <param name="pathVariable">
     /// Содержимое переменной PATH для поиска ffmpeg. Не задаётся в приложении, а в тестах
@@ -52,10 +53,18 @@ public sealed class Mp4Exporter : IVideoExporter
     /// Запас времени на кадры. В приложении не задаётся, в тестах подставляется короткий:
     /// иначе проверка застоя ждала бы настоящие полминуты.
     /// </param>
-    public Mp4Exporter(string? pathVariable = null, TimeSpan? stallTimeout = null)
+    /// <param name="encoderDetector">
+    /// Ищет кодировщики видеокарты. Не задаётся в приложении и подставляется в тестах: проба
+    /// запускает настоящий ffmpeg и на машине без нужной видеокарты ничего не находит.
+    /// </param>
+    public Mp4Exporter(
+        string? pathVariable = null,
+        TimeSpan? stallTimeout = null,
+        IVideoEncoderDetector? encoderDetector = null)
     {
         _pathVariable = pathVariable;
         _stallTimeout = stallTimeout ?? DefaultStallTimeout;
+        _encoderDetector = encoderDetector ?? new VideoEncoderDetector();
     }
 
     public async Task<VideoExportResult> ExportAsync(
@@ -91,7 +100,13 @@ public sealed class Mp4Exporter : IVideoExporter
         // запуска одного файла, и второй обрезал бы WAV, который первый ещё читает.
         var temporaryAudio = Path.Combine(Path.GetTempPath(), $"AudioVisualizer-{Guid.NewGuid():N}.wav");
 
-        var arguments = FfmpegArguments.Build(export, temporaryAudio, outputPath);
+        // Выбор кодировщика разбирается здесь, а не в настройках: настройка хранит пожелание
+        // («видеокарта, если есть»), а имя кодировщика появляется только у того, кто на этой
+        // машине кодек действительно закодировал.
+        var (encoder, fellBackToCpu) = await ResolveEncoderAsync(export, ffmpegPath, cancellationToken)
+            .ConfigureAwait(false);
+
+        var arguments = FfmpegArguments.Build(export, temporaryAudio, outputPath, encoder);
 
         // Команная строка уезжает в текст ошибки. Раньше она лежала в файле рядом с роликом,
         // но файл после выгрузки оставался в папке, а разбор зависания без него шёл слепым.
@@ -148,7 +163,8 @@ public sealed class Mp4Exporter : IVideoExporter
                 switch (written.Outcome)
                 {
                     case FrameWriteOutcome.Cancelled:
-                        return new VideoExportResult(outputPath, written.Frames, stopwatch.Elapsed, Cancelled: true);
+                        return new VideoExportResult(
+                            outputPath, written.Frames, stopwatch.Elapsed, Cancelled: true, Encoder: encoder, FellBackToCpu: fellBackToCpu);
 
                     case FrameWriteOutcome.Stalled:
                         throw new VideoExportException(DescribeStall(export.AacCoder, errors, command));
@@ -184,7 +200,8 @@ public sealed class Mp4Exporter : IVideoExporter
                     throw new VideoExportException(DescribeFailure(errors, ffmpeg.ExitCode, command));
                 }
 
-                return new VideoExportResult(outputPath, written.Frames, stopwatch.Elapsed);
+                return new VideoExportResult(
+                    outputPath, written.Frames, stopwatch.Elapsed, Encoder: encoder, FellBackToCpu: fellBackToCpu);
             }
             finally
             {
@@ -216,6 +233,46 @@ public sealed class Mp4Exporter : IVideoExporter
     /// <summary>Команда ffmpeg одной строкой: её можно скопировать и повторить руками.</summary>
     private static string FormatCommand(string ffmpegPath, IEnumerable<string> arguments)
         => string.Join(' ', arguments.Prepend(ffmpegPath));
+
+    /// <summary>
+    /// Превращает пожелание настройки в имя кодировщика. Пустое имя означает «кодировать
+    /// процессором», и это же значение уходит в <see cref="FfmpegArguments.Build"/>.
+    /// </summary>
+    /// <remarks>
+    /// Отказ искать выбранный кодировщик не приводит к отказу от выгрузки: процессорный
+    /// кодировщик есть всегда, а вот карты может не оказаться или может не уметь нужный
+    /// кодек. Такой отход от настройки не остаётся молчащим — вызывающий видит
+    /// <c>FellBackToCpu</c> и говорит об этом в строке состояния.
+    /// </remarks>
+    private async Task<(string? Encoder, bool FellBackToCpu)> ResolveEncoderAsync(
+        ExportSettings export,
+        string ffmpegPath,
+        CancellationToken cancellationToken)
+    {
+        var choice = export.VideoEncoder?.Trim().ToLowerInvariant() ?? ExportSettings.SoftwareVideoEncoder;
+
+        if (choice == ExportSettings.SoftwareVideoEncoder)
+        {
+            return (null, false);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Ответ зонда читается только списком: недоступность ffmpeg выгрузка и так отдаёт
+        // отдельно и внятно, а пустой список означает ровно одно — кодируем процессором.
+        var detection = await _encoderDetector
+            .DetectAsync(ffmpegPath, export.VideoCodec, cancellationToken)
+            .ConfigureAwait(false);
+
+        var supported = detection.Supported;
+
+        // Первый в списке: порядок вендоров в зонде и есть порядок предпочтения при «auto».
+        var found = choice == ExportSettings.AutoVideoEncoder
+            ? supported.Count > 0 ? supported[0] : null
+            : supported.FirstOrDefault(vendor => string.Equals(vendor.Vendor, choice, StringComparison.Ordinal));
+
+        return found is null ? (null, true) : (found.Encoder, false);
+    }
 
     private static Process StartProcess(string fileName, IEnumerable<string> arguments, out StringBuilder errors)
     {

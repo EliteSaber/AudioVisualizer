@@ -62,6 +62,22 @@ public partial class MainWindow : Window
 
     private bool IsClosing { get; set; }
 
+    /// <summary>
+    /// Открыта вкладка «Экспорт»: пора искать кодировщики видеокарты. Проба запускает ffmpeg,
+    /// поэтому она не должна делаться на запуске окна - там она была бы лишней, а на пустой
+    /// вкладке её никто не видит. Заодно это повод узнать про новый путь к ffmpeg: его правят
+    /// в той же вкладке.
+    /// </summary>
+    private async void OnSettingsTabChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (args.Source is TabControl tabs
+            && ReferenceEquals(tabs.SelectedItem, ExportTab)
+            && DataContext is MainViewModel viewModel)
+        {
+            await viewModel.Settings.RefreshEncodersAsync().ConfigureAwait(true);
+        }
+    }
+
     // Настройки сохраняются при выходе, а не на каждое движение ползунка: иначе файл
     // переписывался бы десятки раз в секунду. Выгрузка видео при этом отменяется.
     private void OnClosed(object? sender, EventArgs args)

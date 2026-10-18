@@ -103,6 +103,136 @@ public class FfmpegArgumentsTests
         Assert.DoesNotContain("-tag:v", FfmpegArguments.Build(Settings, "аудио.wav", "итог.mp4"));
     }
 
+    [Theory]
+    [InlineData("libx264", "h264_nvenc")]
+    [InlineData("libx265", "hevc_nvenc")]
+    [InlineData("libx264", "h264_qsv")]
+    [InlineData("libx265", "hevc_qsv")]
+    [InlineData("libx264", "h264_amf")]
+    [InlineData("libx265", "hevc_amf")]
+    public void КодекВидеокартыСтоитВместоПрограммного(string codec, string encoder)
+    {
+        // У кодировщиков видеокарты нет ни -crf, ни нашего списка пресетов: вместо них уходят
+        // переведённые значения, иначе ffmpeg ругается на неизвестные ключи.
+        var arguments = FfmpegArguments.Build(
+            Settings with { VideoCodec = codec, CodecPreset = "fast", Crf = 20 },
+            "аудио.wav",
+            "итог.mp4",
+            encoder);
+
+        AssertPair(arguments, "-c:v", encoder);
+        Assert.DoesNotContain("-crf", arguments);
+    }
+
+    [Fact]
+    public void Nvenc_КачествоПереводитсяВCqИБитрейтОбнуляется()
+    {
+        // Без -b:v 0 кодировщик режет поток по битрейту, а не по качеству, и ползунок CRF
+        // перестаёт что-либо значить.
+        var arguments = FfmpegArguments.Build(Settings with { CodecPreset = "slow", Crf = 22 }, "аудио.wav", "итог.mp4", "h264_nvenc").ToArray();
+
+        AssertPair(arguments, "-preset", "p5");
+        AssertPair(arguments, "-rc", "vbr");
+        AssertPair(arguments, "-cq", "22");
+        AssertPair(arguments, "-b:v", "0");
+    }
+
+    [Fact]
+    public void Qsv_КачествоПереводитсяВGlobalQuality()
+    {
+        var arguments = FfmpegArguments.Build(Settings with { CodecPreset = "veryfast", Crf = 25 }, "аудио.wav", "итог.mp4", "h264_qsv").ToArray();
+
+        AssertPair(arguments, "-preset", "veryfast");
+        AssertPair(arguments, "-global_quality", "25");
+        Assert.DoesNotContain("-cq", arguments);
+    }
+
+    [Fact]
+    public void Amf_КачествоПереводитсяВCqp()
+    {
+        var arguments = FfmpegArguments.Build(
+            Settings with { VideoCodec = "libx265", CodecPreset = "veryslow", Crf = 20 },
+            "аудио.wav",
+            "итог.mp4",
+            "hevc_amf").ToArray();
+
+        AssertPair(arguments, "-quality", "quality");
+        AssertPair(arguments, "-rc", "cqp");
+        AssertPair(arguments, "-qp_i", "20");
+        AssertPair(arguments, "-qp_p", "20");
+    }
+
+    [Theory]
+    [InlineData("ultrafast", "p1", "veryfast", "speed")]
+    [InlineData("superfast", "p1", "veryfast", "speed")]
+    [InlineData("veryfast", "p2", "veryfast", "speed")]
+    [InlineData("faster", "p3", "faster", "speed")]
+    [InlineData("fast", "p4", "fast", "balanced")]
+    [InlineData("medium", "p4", "medium", "balanced")]
+    [InlineData("slow", "p5", "slow", "quality")]
+    [InlineData("slower", "p6", "slower", "quality")]
+    [InlineData("veryslow", "p7", "veryslow", "quality")]
+    public void ПресетПереводитсяУВсехТрёх(
+        string preset,
+        string nvenc,
+        string qsv,
+        string amf)
+    {
+        // Список пресетов в настройках один на всех, а имён у кодировщиков видеокарты в нём
+        // нет ни одного: таблица обязана покрывать все девять значений, иначе экспорт упадёт
+        // на словаре в последнем кадре ролика.
+        Assert.Equal(nvenc, HardwareEncoderOptions.Quality("nvenc", preset, 20).ToArray()[1]);
+        Assert.Equal(qsv, HardwareEncoderOptions.Quality("qsv", preset, 20).ToArray()[1]);
+        Assert.Equal(amf, HardwareEncoderOptions.Quality("amf", preset, 20).ToArray()[1]);
+    }
+
+    [Theory]
+    [InlineData("libx264", "hevc_nvenc")]
+    [InlineData("libx265", "h264_nvenc")]
+    [InlineData("libx265", "h264_qsv")]
+    [InlineData("libx265", "h264_amf")]
+    public void КодировщикНеТогоКодека_Отклоняется(string codec, string encoder)
+    {
+        // hevc_nvenc при libx264 упал бы на первом кадре, и разбираться пришлось бы по словам
+        // ffmpeg вместо внятного отказа здесь.
+        var settings = Settings with { VideoCodec = codec };
+
+        var exception = Assert.Throws<ArgumentException>(
+            () => FfmpegArguments.Build(settings, "аудио.wav", "итог.mp4", encoder));
+
+        Assert.Contains(encoder, exception.Message, StringComparison.Ordinal);
+        Assert.Contains(codec, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void НеизвестныйКодировщикВидеокарты_Отклоняется()
+    {
+        var exception = Assert.Throws<ArgumentException>(
+            () => FfmpegArguments.Build(Settings, "аудио.wav", "итог.mp4", "h264_mf"));
+
+        Assert.Contains("h264_mf", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HevcНаВидеокарте_ТегДорожкиТотже()
+    {
+        // Тег ставится по кодеку, а не по кодировщику: hvc1 нужен и libx265, и hevc_nvenc.
+        var arguments = FfmpegArguments.Build(Settings with { VideoCodec = "libx265" }, "аудио.wav", "итог.mp4", "hevc_nvenc").ToArray();
+
+        AssertPair(arguments, "-tag:v", "hvc1");
+    }
+
+    [Fact]
+    public void ПустойКодировщик_ОстаётсяПрограммным()
+    {
+        // Пустая строка - это не «кодируй неизвестным», а обычный программный путь: так его
+        // передаёт выгрузка, когда в настройках выбрана видеокарта, но кодировщик не нашёлся.
+        var arguments = FfmpegArguments.Build(Settings, "аудио.wav", "итог.mp4", string.Empty);
+
+        Assert.Contains("libx264", arguments);
+        Assert.Contains("-crf", arguments);
+    }
+
     [Fact]
     public void НеизвестныйКодекВидео_Отклоняется()
     {
@@ -237,4 +367,12 @@ public class FfmpegArgumentsTests
 
     private static IReadOnlyList<string> Build(string outputPath = "итог.mp4")
         => FfmpegArguments.Build(Settings, "аудио.wav", outputPath);
+
+    private static void AssertPair(IReadOnlyList<string> arguments, string key, string value)
+    {
+        var index = Array.IndexOf(arguments.ToArray(), key);
+
+        Assert.True(index > 0, $"в команде нет {key}");
+        Assert.Equal(value, arguments[index + 1]);
+    }
 }

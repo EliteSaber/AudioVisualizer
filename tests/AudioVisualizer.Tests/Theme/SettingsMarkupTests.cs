@@ -77,6 +77,19 @@ public class SettingsMarkupTests
         Assert.Null(checkbox.Attribute("ToolTip"));
     }
 
+    [Fact]
+    public void ПодсказкаКодировщиков_СкрытаКогдаГоворитьНечего()
+    {
+        // При найденной видеокарте сообщения нет вовсе, а блок с отступом всё равно держал бы
+        // высоту: пустая строка под списком стоила пользователю пустого места.
+        var message = MainWindow()
+            .Descendants()
+            .Single(element => (string?)element.Attribute("Text") == "{Binding Settings.EncodersMessage}");
+
+        Assert.Contains("Visibility", (string?)message.Attribute("Visibility"));
+        Assert.Contains("HasEncodersMessage", (string?)message.Attribute("Visibility"), StringComparison.Ordinal);
+    }
+
     /// <summary>Надпись строки статуса: единственная в окне, у которой текст привязан к Status.</summary>
     private static XElement Status()
         => MainWindow()

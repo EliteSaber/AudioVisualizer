@@ -35,7 +35,22 @@ public sealed record VideoExportProgress(int FramesDone, int TotalFrames, TimeSp
 /// поэтому она приходит таким же результатом, а не исключением: иначе отладчик и журналы
 /// показывают красное исключение там, где всё штатно.
 /// </param>
-public sealed record VideoExportResult(string Path, int Frames, TimeSpan Elapsed, bool Cancelled = false);
+/// <param name="Encoder">
+/// Чем на самом деле кодировалось видео. Пусто - процессором, иначе имя кодировщика
+/// видеокарты, например h264_nvenc.
+/// </param>
+/// <param name="FellBackToCpu">
+/// Просили кодировать видеокартой, а кодировала процессорная: карты не нашлось или она не
+/// умеет выбранный кодек. Выгрузка от этого не хуже, но сказать о ней надо, иначе настройка
+/// молча не сделала того, чего просили.
+/// </param>
+public sealed record VideoExportResult(
+    string Path,
+    int Frames,
+    TimeSpan Elapsed,
+    bool Cancelled = false,
+    string? Encoder = null,
+    bool FellBackToCpu = false);
 
 /// <summary>
 /// Выгрузка не удалась: ffmpeg не найден, вернул ошибку или не смог записать файл.

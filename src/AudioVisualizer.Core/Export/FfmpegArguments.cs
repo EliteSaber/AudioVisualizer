@@ -19,20 +19,22 @@ public static class FfmpegArguments
     ];
 
     /// <summary>
-    /// Кодек, mp4 с которым без тега hvc1 откроют не все. Имя живёт здесь, а не в списке
-    /// кодеков: настройка отвечает за то, что выбирает пользователь, а тег — за особенность
-    /// упаковки, о которой выбирающий не знает.
-    /// </summary>
-    private const string HevcCodec = "libx265";
-
-    /// <summary>
     /// Тег дорожки H.265. Без него ffmpeg пишет hev1, а его не открывают QuickTime и часть
     /// плееров на телефонах: разница в том, где лежат служебные записи кодека, и читающий
     /// игнорирует их вместо нужных.
     /// </summary>
     private static readonly string[] HevcMp4Tag = ["-tag:v", "hvc1"];
 
-    public static IReadOnlyList<string> Build(ExportSettings settings, string audioPath, string outputPath)
+    /// <param name="encoder">
+    /// Кодировщик видеокарты (h264_nvenc и подобные). Пусто - кодируем процессором выбранным
+    /// в настройках кодеком. Выбор кодировщика приходит из выгрузки, где видеокарта уже
+    /// проверена пробным кадром: собирать команду раньше нечего.
+    /// </param>
+    public static IReadOnlyList<string> Build(
+        ExportSettings settings,
+        string audioPath,
+        string outputPath,
+        string? encoder = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentException.ThrowIfNullOrWhiteSpace(audioPath);
@@ -66,6 +68,8 @@ public static class FfmpegArguments
                 nameof(settings));
         }
 
+        var (videoEncoder, quality) = ResolveEncoder(encoder, videoCodec, preset, crf);
+
         var coder = settings.AacCoder?.Trim().ToLowerInvariant();
         if (coder is null || !ExportSettings.AacCoders.Contains(coder, StringComparer.OrdinalIgnoreCase))
         {
@@ -95,11 +99,10 @@ public static class FfmpegArguments
             "-map", "0:v",
             "-map", "1:a",
 
-            // Кодек берётся из настроек: у x264 и x265 общие -preset и -crf, поэтому
-            // переключение между ними не трогает остальную команду.
-            "-c:v", videoCodec,
-            "-preset", preset,
-            "-crf", crf.ToString(CultureInfo.InvariantCulture),
+            // Кодек берётся из настроек, а у кодировщика видеокарты своя шкала CRF и пресета,
+            // поэтому вместо -crf и нашего списка пресетов туда уходят переведённые значения.
+            "-c:v", videoEncoder,
+            .. quality,
 
             // yuv420p требует чётных размеров кадра, иначе ffmpeg падает на первом же кадре.
             "-pix_fmt", "yuv420p",
@@ -119,9 +122,47 @@ public static class FfmpegArguments
             // Видео беззвучно не заканчивается: без -shortest ffmpeg ждал бы конца потока.
             "-shortest",
 
-            .. videoCodec == HevcCodec ? HevcMp4Tag : [],
+            // Тег нужен по кодеку, а не по кодировщику: hvc1 ставят и libx265, и hevc_nvenc.
+            .. VideoEncoderDetector.Family(videoCodec) == "hevc" ? HevcMp4Tag : [],
             outputPath
         ];
+    }
+
+    /// <summary>
+    /// Кодировщик и его параметры качества. Кодировщик видеокарты обязан совпадать с кодеком
+    /// из настроек: hevc_nvenc при libx264 упал бы на первом кадре, и разбираться пришлось бы
+    /// по словам ffmpeg вместо внятного отказа здесь.
+    /// </summary>
+    private static (string Encoder, IReadOnlyList<string> Quality) ResolveEncoder(
+        string? encoder,
+        string videoCodec,
+        string preset,
+        int crf)
+    {
+        if (string.IsNullOrWhiteSpace(encoder))
+        {
+            return (videoCodec, ["-preset", preset, "-crf", crf.ToString(CultureInfo.InvariantCulture)]);
+        }
+
+        var suffix = HardwareEncoderOptions.SuffixOf(encoder);
+
+        if (suffix is null)
+        {
+            throw new ArgumentException(
+                $"Неизвестный кодировщик видеокарты \"{encoder}\". Ожидается один из: {string.Join(", ", HardwareEncoderOptions.Suffixes)}.",
+                nameof(encoder));
+        }
+
+        var expected = VideoEncoderDetector.Family(videoCodec);
+
+        if (!string.Equals(expected, VideoEncoderDetector.Family(encoder), StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"Кодировщик \"{encoder}\" не подходит кодеку \"{videoCodec}\": нужен {expected}_{suffix}.",
+                nameof(encoder));
+        }
+
+        return (encoder, HardwareEncoderOptions.Quality(suffix, preset, crf));
     }
 
     private static int RequireEven(int value, string parameterName)

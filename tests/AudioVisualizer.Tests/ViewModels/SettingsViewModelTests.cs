@@ -1,5 +1,7 @@
 using AudioVisualizer.App.ViewModels;
+using AudioVisualizer.Core.Export;
 using AudioVisualizer.Core.Settings;
+using AudioVisualizer.Tests.Export;
 
 namespace AudioVisualizer.Tests.ViewModels;
 
@@ -11,14 +13,24 @@ public class SettingsViewModelTests
     /// У каждого теста свой пустой файл пресетов: иначе пресет, сохранённый одним тестом,
     /// попадал бы в список другого, а результат зависел от порядка запуска.
     /// </summary>
-    private static SettingsViewModel Create(AppSettings? settings = null)
+    /// <param name="settings">Настройки для панели.</param>
+    /// <param name="detector">
+    /// Зонд видеокарты. Без него панель искала бы настоящий ffmpeg и запускала пробы: тесты
+    /// модели представления не должны зависеть от того, что стоит на машине.
+    /// </param>
+    private static SettingsViewModel Create(
+        AppSettings? settings = null,
+        IVideoEncoderDetector? detector = null)
     {
         if (File.Exists(PresetsPath))
         {
             File.Delete(PresetsPath);
         }
 
-        return new SettingsViewModel(settings ?? AppSettings.Default, new ExportPresetStore(PresetsPath));
+        return new SettingsViewModel(
+            settings ?? AppSettings.Default,
+            new ExportPresetStore(PresetsPath),
+            detector ?? new FakeEncoderDetector([]));
     }
 
     [Fact]
@@ -284,5 +296,147 @@ public class SettingsViewModelTests
         Assert.Equal(2, viewModel.FillModeChoices.Count);
         Assert.Equal(3, viewModel.ExportPresets.Count);
         Assert.All(viewModel.ExportPresets, preset => Assert.False(preset.Custom));
+    }
+
+    [Fact]
+    public void КодированиеВидео_ПоУмолчаниюПроцессор()
+    {
+        var viewModel = Create();
+
+        Assert.Equal(ExportSettings.DefaultVideoEncoder, viewModel.VideoEncoder);
+        Assert.Contains(viewModel.VideoEncoder, viewModel.EncoderChoices.Select(choice => choice.Value));
+    }
+
+    [Fact]
+    public async Task НайденнаяВидеокарта_ПопадаетВСписок()
+    {
+        var viewModel = Create(detector: new FakeEncoderDetector([new VideoEncoderSupport("nvenc", "NVIDIA", "h264_nvenc")]));
+
+        await viewModel.RefreshEncodersAsync();
+
+        Assert.Contains(viewModel.EncoderChoices, choice => choice.Value == "nvenc");
+        Assert.Equal("NVIDIA", viewModel.EncoderChoices.Single(choice => choice.Value == "nvenc").ToString());
+        Assert.Equal(string.Empty, viewModel.EncodersMessage);
+    }
+
+    [Fact]
+    public async Task БезВидеокарты_ВСпискеОстаютсяДваПунктаИОбъяснение()
+    {
+        // Молча оставить один пункт значило бы выглядеть так, будто видеокарты не бывает.
+        var viewModel = Create(detector: new FakeEncoderDetector([]));
+
+        await viewModel.RefreshEncodersAsync();
+
+        Assert.Equal(2, viewModel.EncoderChoices.Count);
+        Assert.Contains("видеокарта", viewModel.EncodersMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task БезFfmpeg_ПанельГоворитПроFfmpegАНеПроВидеокарту()
+    {
+        // Причина важна: потерявшийся из PATH ffmpeg выглядел бы как отсутствие видеокарты,
+        // и человек пошёл бы искать не туда.
+        var viewModel = Create(detector: new FakeEncoderDetector([], ffmpegAvailable: false));
+
+        await viewModel.RefreshEncodersAsync();
+
+        Assert.Contains("ffmpeg", viewModel.EncodersMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("видеокарта", viewModel.EncodersMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ЕстьВидеокарта_ОбъясненияНет()
+    {
+        var viewModel = Create(
+            detector: new FakeEncoderDetector([new VideoEncoderSupport("nvenc", "NVIDIA", "h264_nvenc")]));
+
+        await viewModel.RefreshEncodersAsync();
+
+        Assert.Equal(string.Empty, viewModel.EncodersMessage);
+    }
+
+    [Fact]
+    public async Task ВыбраннаяНайденнаяВидеокарта_ОстаётсяПриСменеКодека()
+    {
+        // Зонд бьёт по коду: сменился кодек - список мог сжаться, и выбор не должен слететь.
+        var viewModel = Create(
+            AppSettings.Default with { Export = new ExportSettings { VideoEncoder = "nvenc" } },
+            new FakeEncoderDetector([new VideoEncoderSupport("nvenc", "NVIDIA", "h264_nvenc")]));
+
+        viewModel.VideoCodec = "libx265";
+        await viewModel.RefreshEncodersAsync();
+
+        Assert.Equal("nvenc", viewModel.VideoEncoder);
+        Assert.Contains(viewModel.EncoderChoices, choice => choice.Value == "nvenc");
+    }
+
+    [Fact]
+    public async Task ВыбраннойВидеокартыНет_ОнаОстаётсяВСпискеСПометкой()
+    {
+        // Сбрасывать выбор молча нельзя: пользователь вернулся из поездки с другой видеокартой
+        // и должен видеть, почему список стал короче.
+        var viewModel = Create(AppSettings.Default with { Export = new ExportSettings { VideoEncoder = "amf" } });
+
+        await viewModel.RefreshEncodersAsync();
+
+        Assert.Equal("amf", viewModel.VideoEncoder);
+        Assert.Contains("amf", viewModel.EncoderChoices.Select(choice => choice.Value));
+        Assert.Contains(
+            viewModel.EncoderChoices,
+            choice => choice.Value == "amf" && choice.ToString().Contains("не найдена", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task КодированиеВидео_ДоезжаетВНастройкиИОбратно()
+    {
+        var viewModel = Create(AppSettings.Default with { Export = new ExportSettings { VideoEncoder = "auto" } });
+
+        Assert.Equal("auto", viewModel.VideoEncoder);
+        Assert.Equal("auto", viewModel.ToAppSettings().Export.VideoEncoder);
+
+        viewModel.VideoEncoder = "qsv";
+        Assert.Equal("qsv", viewModel.ToAppSettings().Export.VideoEncoder);
+    }
+
+[Fact]
+    public async Task ПравкаПутиКFfmpeg_ПерезапускаетПробуСама()
+    {
+        // Путь задаётся один на машину, и после его правки прежний ответ зонда больше не годен.
+        // Зонд дёргается сам, звать RefreshEncodersAsync вручную не нужно.
+        var detector = new FakeEncoderDetector([]);
+        var viewModel = Create(detector: detector);
+
+        await viewModel.RefreshEncodersAsync();
+        Assert.Equal(1, detector.Calls);
+
+        viewModel.FfmpegPath = @"C:\tools\ffmpeg.exe";
+
+        Assert.Equal(2, detector.Calls);
+    }
+
+    [Fact]
+    public async Task ПрограммнаяПравкаНастроек_ЗондНеДёргает()
+    {
+        // Apply и выбор пресета меняют поля настроек, а не выбор пользователя: зонд на каждый
+        // пересозданный пресет запускать пробы - это десятки миллисекунд впустую.
+        var detector = new FakeEncoderDetector([]);
+        var viewModel = Create(detector: detector);
+
+        await viewModel.RefreshEncodersAsync();
+        viewModel.Apply(AppSettings.Default with { Export = new ExportSettings { VideoCodec = "libx265" } });
+
+        Assert.Equal(1, detector.Calls);
+    }
+
+    [Fact]
+    public async Task ОшибкаЗонда_НеРоняетПанель()
+    {
+        var viewModel = Create(detector: new FakeEncoderDetector(new InvalidOperationException("ffmpeg сломан")));
+
+        await viewModel.RefreshEncodersAsync();
+
+        Assert.Equal(2, viewModel.EncoderChoices.Count);
+        Assert.Equal(ExportSettings.DefaultVideoEncoder, viewModel.VideoEncoder);
+        Assert.False(viewModel.IsDetectingEncoders);
     }
 }

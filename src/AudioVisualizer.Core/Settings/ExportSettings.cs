@@ -29,6 +29,26 @@ public sealed record ExportSettings
     /// </summary>
     public const string DefaultAacCoder = "nmr";
 
+    /// <summary>
+    /// Чем кодируется видео. «software» - сам процессор, «auto» - видеокарта, если её нашлось,
+    /// остальное - конкретный производитель. Значения кодировщиков ffmpeg здесь намеренно
+    /// нет: пара «кодек + производитель» собирается в имя h264_nvenc уже при выгрузке, где
+    /// известно, что видеокарта действительно есть.
+    /// </summary>
+    public static IReadOnlyList<string> VideoEncoders { get; } = ["software", "auto", "nvenc", "qsv", "amf"];
+
+    /// <summary>
+    /// Кодирование процессором по умолчанию. Видеокарта включается вручную: у неё своя шкала
+    /// качества, и молчаливый переход на неё изменил бы картинку у всех, кто ничего не просил.
+    /// </summary>
+    public const string DefaultVideoEncoder = "software";
+
+    /// <summary>Кодирование процессором, без видеокарты.</summary>
+    public const string SoftwareVideoEncoder = "software";
+
+    /// <summary>Кодирование видеокартой, если она нашлась и кодирует выбранный кодек.</summary>
+    public const string AutoVideoEncoder = "auto";
+
     public int Width { get; init; } = 1920;
 
     public int Height { get; init; } = 1080;
@@ -45,8 +65,16 @@ public sealed record ExportSettings
     public int Crf { get; init; } = 18;
 
     /// <summary>
+    /// Чем кодируется видео: процессором, видеокартой по выбору или по автомату. Список -
+    /// в <see cref="VideoEncoders"/>. Настоящие имена кодировщиков ffmpeg появляются только
+    /// в команде запуска: выбор «видеокарта» проверяется настоящим пробным кодированием.
+    /// </summary>
+    public string VideoEncoder { get; init; } = DefaultVideoEncoder;
+
+    /// <summary>
     /// Пресет кодека: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow.
-    /// Список общий у обоих кодеков, но шкала у них своя: у H.265 каждый шаг дороже.
+    /// Список общий у всех кодеков, но у каждого своя шкала: у H.265 каждый шаг дороже, а у
+    /// кодировщиков видеокарты своих имён в этом списке нет вовсе, и значения переводятся.
     /// </summary>
     public string CodecPreset { get; init; } = "medium";
 

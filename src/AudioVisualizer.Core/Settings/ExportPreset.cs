@@ -7,7 +7,7 @@ namespace AudioVisualizer.Core.Settings;
 /// </summary>
 /// <remarks>
 /// Пресет - это весь <see cref="ExportSettings"/>, кроме пути к ffmpeg: путь принадлежит
-/// машине, а не ролику, и переносить его между компьютерам�� незачем. Встроенные пресеты
+/// машине, а не ролику, и переносить его между компьютерами незачем. Встроенные пресеты
 /// помечены <see cref="Custom"/> = false и удалить их нельзя.
 /// </remarks>
 public sealed record ExportPreset

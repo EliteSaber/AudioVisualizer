@@ -120,6 +120,78 @@ public class ExportPresetTests
         Assert.Contains(reloaded.ExportPresets, preset => preset.Name == "Ночной рендер" && preset.Custom);
     }
 
+    /// <summary>
+    /// Выбор после перезапуска. Имя пресета в настройках не хранится, панель сопоставляет
+    /// параметры, поэтому отметка всегда истинна: показать пресет, не описывающий текущие
+    /// настройки, отсюда невозможно.
+    /// </summary>
+    [Fact]
+    public void ПослеПерезапуска_ОтмеченПресетСовпадающимиПараметрами()
+    {
+        var (viewModel, store) = Create();
+
+        var preset = viewModel.ExportPresets.First(item => item.Name == "720p30");
+        viewModel.SelectedExportPreset = preset;
+
+        var reloaded = new SettingsViewModel(viewModel.ToAppSettings(), store);
+
+        // Встроенные пресеты живут в статическом списке, поэтому это тот же самый пункт.
+        Assert.Same(preset, reloaded.SelectedExportPreset);
+    }
+
+    [Fact]
+    public void ПослеПерезапуска_ПравленыйПараметр_ОставляетСписокПустым()
+    {
+        // Совпадение по размеру ещё не совпадение: CRF в пресете один, а человек поменял.
+        var (viewModel, store) = Create();
+
+        viewModel.SelectedExportPreset = viewModel.ExportPresets.First(item => item.Name == "720p30");
+
+        var settings = viewModel.ToAppSettings();
+        settings = settings with { Export = settings.Export with { Crf = 30 } };
+
+        var reloaded = new SettingsViewModel(settings, store);
+
+        Assert.Null(reloaded.SelectedExportPreset);
+    }
+
+    [Fact]
+    public void ПослеПерезапуска_УдалённыйПресетНеВозвращается()
+    {
+        // Пресет уехал в файл, настройки от него остались в настройках, а потом его удалили.
+        // Настройки удалённого пресета остаются в силе - исчезать им незачем, - но отмечать
+        // несуществующий пункт было бы враньём.
+        var (_, store) = Create();
+        var source = Create().Item1;
+
+        SavePreset(source, "Ночной рендер", width: 800);
+        var settings = source.ToAppSettings();
+
+        source.DeleteExportPresetCommand.Execute(null);
+
+        var reloaded = new SettingsViewModel(settings, store);
+
+        Assert.Null(reloaded.SelectedExportPreset);
+        Assert.Equal(800, reloaded.ExportWidth);
+    }
+
+    [Fact]
+    public void СбросВыгрузки_НеВозвращаетОтмеченныйПресет()
+    {
+        // Восстановление живёт в конструкторе, а не в Apply: после сброса параметры стали
+        // ровно как у «1080p60», и отметить его было бы можно только повторным применением
+        // правила в Apply - то есть показать пресет, который человек только что отменил.
+        var viewModel = Create().Item1;
+
+        viewModel.SelectedExportPreset = viewModel.ExportPresets.First(item => item.Name == "720p30");
+        Assert.Equal(1280, viewModel.ExportWidth);
+
+        viewModel.ResetExportCommand.Execute(null);
+
+        Assert.Equal(1920, viewModel.ExportWidth);
+        Assert.Null(viewModel.SelectedExportPreset);
+    }
+
     [Fact]
     public void Удаление_УбираетПресетИзСпискаИФайла()
     {

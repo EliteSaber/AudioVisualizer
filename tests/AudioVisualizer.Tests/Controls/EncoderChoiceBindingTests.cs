@@ -84,6 +84,53 @@ public class EncoderChoiceBindingTests
         Assert.Equal(ExportSettings.DefaultVideoEncoder, viewModel.ToAppSettings().Export.VideoEncoder);
     });
 
+    /// <summary>
+    /// Регрессия: выбранный пресет выгрузки снимался при открытии вкладки «Экспорт».
+    /// </summary>
+    /// <remarks>
+    /// Проба пересобирает список кодировщиков, а <see cref="ComboBox"/> на Clear() приводит
+    /// SelectedValue в null, и двусторонняя привязка пишет этот null в настройку. Панель этот
+    /// null тут же возвращает, но к тому моменту, как событие о правке дошло до сброса выбора
+    /// пресета, тот уже был снят. Симптом был такой: параметры ролика остались от пресета,
+    /// а в списке не было выбрано ничего.
+    /// </remarks>
+    [Fact]
+    public void ПробаВидеокарты_НеСнимаетВыбранныйПресет() => Sta.Run(() =>
+    {
+        var viewModel = CreateViewModel();
+        Bind(viewModel);
+
+        var preset = viewModel.ExportPresets.First(item => item.Name == "720p30");
+        viewModel.SelectedExportPreset = preset;
+
+        viewModel.RefreshEncodersAsync().GetAwaiter().GetResult();
+
+        Assert.Same(preset, viewModel.SelectedExportPreset);
+    });
+
+    /// <summary>
+    /// То же самое с другой стороны: список пресетов привязан к тому же свойству и после пробы
+    /// обязан показывать выбранный пункт, а не пустое поле.
+    /// </summary>
+    [Fact]
+    public void СписокПресета_ПоказываетВыборПослеПробы() => Sta.Run(() =>
+    {
+        var viewModel = CreateViewModel();
+        Bind(viewModel);
+        var presets = BindPresets(viewModel);
+
+        var preset = viewModel.ExportPresets.First(item => item.Name == "720p30");
+
+        // Настоящее действие человека: выбрал пункт из списка, а не присвоил свойство из кода.
+        presets.SelectedItem = preset;
+        Assert.Same(preset, viewModel.SelectedExportPreset);
+
+        viewModel.RefreshEncodersAsync().GetAwaiter().GetResult();
+
+        Assert.Same(preset, viewModel.SelectedExportPreset);
+        Assert.Same(preset, presets.SelectedItem);
+    });
+
     /// <summary>Подпись списка подсказывает, что в нём нашлось: без карты текст должен быть виден.</summary>
     [Fact]
     public void ПодсказкаВиднаТамГдеЕстьОЧемСказать() => Sta.Run(() =>
@@ -128,6 +175,31 @@ public class EncoderChoiceBindingTests
             comboBox,
             ComboBox.SelectedValueProperty,
             new Binding(nameof(SettingsViewModel.VideoEncoder))
+            {
+                Source = viewModel,
+                Mode = BindingMode.TwoWay
+            });
+
+        comboBox.ApplyTemplate();
+
+        return comboBox;
+    }
+
+    /// <summary>
+    /// Список пресетов выгрузки из разметки: выбор приходит по самому пункту, а не по значению
+    /// внутри него, поэтому у списка нет <c>SelectedValuePath</c>.
+    /// </summary>
+    private static ComboBox BindPresets(SettingsViewModel viewModel)
+    {
+        var comboBox = new ComboBox
+        {
+            ItemsSource = viewModel.ExportPresets
+        };
+
+        BindingOperations.SetBinding(
+            comboBox,
+            ComboBox.SelectedItemProperty,
+            new Binding(nameof(SettingsViewModel.SelectedExportPreset))
             {
                 Source = viewModel,
                 Mode = BindingMode.TwoWay

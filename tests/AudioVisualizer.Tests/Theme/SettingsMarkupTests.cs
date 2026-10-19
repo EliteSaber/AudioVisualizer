@@ -90,6 +90,85 @@ public class SettingsMarkupTests
         Assert.Contains("HasEncodersMessage", (string?)message.Attribute("Visibility"), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void РаскрытыйСписок_НеПохожНаПоле()
+    {
+        // Список красил себя кистью поля, поэтому открытый и закрытый списки выглядели
+        // одинаково и вправду были одного цвета. Перекраска попапа в этом не помогала: его
+        // заливал плотный ряд пунктов, и смена PopupBackground меняла только попап палитры
+        // цвета. Видно только глазами, поэтому обе причины проверяются по разметке.
+        var surface = PopupSurface();
+
+        // Проверка на "PopupBackground" отсекает возврат на палитру поля отдельной проверкой.
+        Assert.Contains("PopupBackground", (string?)surface.Attribute("Background") ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("PopupBorderBrush", (string?)surface.Attribute("BorderBrush") ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ПунктСписка_НеЗаливаетСамСебя()
+    {
+        // Вторая половина той же поломки, и она незаметнее: пока пункт непрозрачен, попап под
+        // ним не виден, и заливка попапа не значит ничего. Заливку списка задаёт рамка попапа.
+        var itemRoot = AppXaml()
+            .Descendants()
+            .Single(element => element.Name.LocalName == "Border"
+                && element.Attributes().Any(attribute => attribute.Name.LocalName == "Name" && attribute.Value == "ItemRoot"));
+
+        var background = (string?)itemRoot.Attribute("Background") ?? string.Empty;
+
+        Assert.False(
+            background.Contains("Resource", StringComparison.Ordinal),
+            $"Пункт списка заливает себя сам ({background}) и закрывает попап под собой.");
+    }
+
+    [Fact]
+    public void РаскрытыйСписок_ОтделёнТенью()
+    {
+        // Цветом список от панели не отделяется: PopupBackground и PanelBackground различаются
+        // на три единицы из 255, то есть для глаза это один цвет, и остаётся только рамка.
+        // Тень обязательна, и места под неё хватать тоже: эффект не входит в размер элемента,
+        // и окно попапа обрежет её по своим границам, то есть тихо и незаметно.
+        var popup = Popup();
+
+        var surface = PopupSurface();
+
+        Assert.Contains("Border.Effect", surface.Descendants().Select(element => element.Name.LocalName));
+
+        var spacer = popup.Elements().Single();
+
+        Assert.False(
+            string.IsNullOrWhiteSpace((string?)spacer.Attribute("Margin")),
+            "У попапа нет полей под тень: окно попапа обрежет её по своим границам.");
+    }
+
+    /// <summary>
+    /// Поверхность попапа списка: та, что залита кистью из словаря. Рамок подряд две, и обе
+    /// прозрачные, так что признак один - ссылка на ресурс.
+    /// </summary>
+    private static XElement PopupSurface()
+    {
+        var popup = Popup();
+
+        return popup.Descendants().Single(element =>
+            element.Name.LocalName == "Border" && Painted(element));
+    }
+
+    private static bool Painted(XElement border)
+        => ((string?)border.Attribute("Background"))?.Contains("StaticResource", StringComparison.Ordinal) == true;
+
+    private static XElement Popup()
+    {
+        var popup = AppXaml()
+            .Descendants()
+            .SingleOrDefault(element => element.Name.LocalName == "Popup"
+                // Имя ищется по x:Name, как и в разметке окна.
+                && element.Attributes().Any(attribute => attribute.Name.LocalName == "Name" && attribute.Value == "PART_Popup"));
+
+        Assert.NotNull(popup);
+
+        return popup!;
+    }
+
     /// <summary>Надпись строки статуса: единственная в окне, у которой текст привязан к Status.</summary>
     private static XElement Status()
         => MainWindow()
@@ -112,6 +191,10 @@ public class SettingsMarkupTests
 
     private static XDocument MainWindow()
         => XDocument.Parse(File.ReadAllText(Path.Combine(AppRoot(), "MainWindow.xaml")));
+
+    /// <summary>Словарь приложения: попап списка объявлен там же, где и кисти.</summary>
+    private static XDocument AppXaml()
+        => XDocument.Parse(File.ReadAllText(Path.Combine(AppRoot(), "App.xaml")));
 
     private static string AppRoot()
     {

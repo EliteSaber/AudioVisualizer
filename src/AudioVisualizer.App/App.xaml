@@ -62,6 +62,13 @@
         <SolidColorBrush x:Key="PopupBackground" Color="#FF2E2E35" />
         <SolidColorBrush x:Key="PopupBorderBrush" Color="#FF55555C" />
         <SolidColorBrush x:Key="PopupTextBrush" Color="#FFD0D0D0" />
+
+        <!--
+            Цвет тени попапа - тоже ресурс, а не литерал в разметке. Тень принимает Color,
+            а не кисть, так что объявить её можно только так; правило "цвета только через
+            словарь" из-за этого не приходится оговаривать отдельно.
+        -->
+        <Color x:Key="PopupShadowColor">#FF000000</Color>
 <SolidColorBrush x:Key="SwatchBorderBrush" Color="#FF6A6A70" />
 
         <!--
@@ -302,15 +309,33 @@
                                    Placement="Bottom"
                                    PopupAnimation="Fade"
                                    IsOpen="{TemplateBinding IsDropDownOpen}">
-                                <Border MinWidth="{TemplateBinding ActualWidth}"
-                                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
-                                        Margin="0,2,0,0"
-                                        Background="{StaticResource ControlBackground}"
-                                        BorderBrush="{StaticResource PanelBorder}"
-                                        BorderThickness="1">
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
-                                    </ScrollViewer>
+                                <!--
+                                    Палитра попапа - всплывающая, а не палитра поля. На палитре
+                                    поля раскрытый список совпадает с закрытым и по заливке, и по
+                                    рамке, и получается один прямоугольник. Эти кисти объявлены для
+                                    попапа палитры цвета, и списку они подходят по назначению те же.
+
+                                    Но палитрой список от панели не отделяется: PopupBackground и
+                                    PanelBackground различаются на три единицы из 255, и глазом это
+                                    один цвет. Отделяет тень. Поля на внешней рамке обязательны:
+                                    эффект не входит в размер элемента, и окно попапа обрежет тень
+                                    по своим границам. Зазор над списком получается 4 px, а сам
+                                    попап становится шире закрытого поля на 8 px.
+                                -->
+                                <Border Margin="2,4,6,8" Background="Transparent">
+                                    <Border MinWidth="{TemplateBinding ActualWidth}"
+                                            MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                            Background="{StaticResource PopupBackground}"
+                                            BorderBrush="{StaticResource PopupBorderBrush}"
+                                            BorderThickness="1">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="8" ShadowDepth="3" Direction="270" Opacity="0.6"
+                                                              Color="{StaticResource PopupShadowColor}" />
+                                        </Border.Effect>
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
+                                        </ScrollViewer>
+                                    </Border>
                                 </Border>
                             </Popup>
 
@@ -328,28 +353,36 @@
             </Setter>
         </Style>
 
-        <Style TargetType="{x:Type ComboBoxItem}">
-            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-            <Setter Property="Padding" Value="6,4" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type ComboBoxItem}">
-                        <Border x:Name="ItemRoot"
-                                Padding="{TemplateBinding Padding}"
-                                Background="{StaticResource ControlBackground}">
-                            <ContentPresenter VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemRoot" Property="Background" Value="{StaticResource ItemHighlightBrush}" />
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemRoot" Property="Background" Value="{StaticResource SelectionBackground}" />
-                                <Setter Property="Foreground" Value="{StaticResource SelectionText}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
+<!--
+                            Заливку пункта задаёт рамка попапа, а не сам пункт. Пункт красил
+                            себя кистью поля, и попап под ним не было видно вовсе: смена
+                            PopupBackground меняла только попап палитры цвета, а список оставался
+                            прежним - и список был покрашен в цвет закрытого поля, поэтому
+                            открытый и закрытый списки выглядели одинаково. Состояния ниже
+                            прозрачность переопределяют, как и раньше переопределяли заливку.
+                        -->
+                        <Style TargetType="{x:Type ComboBoxItem}">
+                            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                            <Setter Property="Padding" Value="6,4" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="{x:Type ComboBoxItem}">
+                                        <Border x:Name="ItemRoot"
+                                                Padding="{TemplateBinding Padding}"
+                                                Background="Transparent">
+                                            <ContentPresenter VerticalAlignment="Center" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsHighlighted" Value="True">
+                                                <Setter TargetName="ItemRoot" Property="Background" Value="{StaticResource ItemHighlightBrush}" />
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="ItemRoot" Property="Background" Value="{StaticResource SelectionBackground}" />
+                                                <Setter Property="Foreground" Value="{StaticResource SelectionText}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>

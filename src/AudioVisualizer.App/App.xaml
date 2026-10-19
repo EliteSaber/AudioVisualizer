@@ -80,6 +80,22 @@
         <SolidColorBrush x:Key="IconHoverBrush" Color="#FFFFFFFF" />
 
         <!--
+            Полоса прокрутки: три состояния бегунка заданы отдельными кистями, а не прозрачностью
+            одного цвета. Белый штрих, положенный на светлую подложку, выцветает, поэтому для
+            светлой темы такие состояния пришлось бы всё равно объявлять заново.
+
+            Дорожка - тоже кисть, а не Transparent: в тёмной панели она не нужна, а в светлой
+            без неё бегунок повисает в воздухе.
+
+            Названы по назначению, а не по цвету: смена темы меняет значения в этих же ключах,
+            и ни одна строка разметки под неё не трогается.
+        -->
+        <SolidColorBrush x:Key="ScrollBarTrackBrush" Color="#002B2B31" />
+        <SolidColorBrush x:Key="ScrollBarThumbBrush" Color="#FF4E4E59" />
+        <SolidColorBrush x:Key="ScrollBarThumbHoverBrush" Color="#FF6E6E7C" />
+        <SolidColorBrush x:Key="ScrollBarThumbPressedBrush" Color="#FF7A7A88" />
+
+        <!--
             Кнопка-иконка без подписи: подпись переехала в ToolTip и в AutomationProperties.Name,
             поэтому без него кнопка не называется ни мышью, ни программой чтения с экрана.
 
@@ -417,6 +433,159 @@
             </Setter>
         </Style>
 
-        </ResourceDictionary>
+        <!--
+            Своя полоса прокрутки вместо системной. Тема Aero2 рисует светло-серое полотно с
+            бегунком и кнопками-стрелками, и в тёмной панели это выглядит чужой вставкой:
+            полосы стоят на четырёх вкладках, в раскрытом списке и в поле сообщения.
+
+            Объявлено неявным стилем, а не по ключу: полосы заводит не разметка, а шаблоны
+            ScrollViewer и TextBox, и на неявный стиль приложения они смотрят сами. Ссылка по
+            ключу потребовала бы проставить её в каждом ScrollViewer, а забытую ссылку
+            ничто не поймает: полоса без своего стиля просто рисуется системная.
+
+            Подстановка по смене ресурса в словаре приложения не проверена запуском, поэтому
+            все ссылки обычные, как и в остальной палитре.
+        -->
+
+        <!--
+            Кнопки страниц - прозрачные и без рисунка. Нужны не ради рисунка, а ради клика:
+            Track обрабатывает мышь только за бегунком, а листает страницей нажатие на кнопке
+            под ним. Без кнопок клик по дорожке не листает ничего, и колесо остаётся
+            единственным способом прокрутки.
+
+            Шаблон у кнопки свой и пустой обязателен: тема красит кнопки сама, и без него на
+            торцах дорожки выросли бы системные стрелки.
+        -->
+        <ControlTemplate x:Key="ScrollBarPageButtonTemplate" TargetType="{x:Type RepeatButton}">
+            <Border Background="Transparent" />
+        </ControlTemplate>
+
+        <Style x:Key="ScrollBarPageButton" TargetType="{x:Type RepeatButton}">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="Template" Value="{StaticResource ScrollBarPageButtonTemplate}" />
+        </Style>
+
+        <!--
+            Бегунок: заливка цветом и радиус, длину отдаёт дорожка. Собственный шаблон у Thumb
+            обязателен - иначе система нарисует бегунок сама, и стилизация полосы сведётся
+            на нет, хотя по коду всё выглядит сделанным.
+
+            Состояние наведения берётся у полосы-владельца: IsMouseOver не наследуется, и у
+            самого бегунка своего состояния нет - он узкий, и наводить пришлось бы на всю
+            полосу, чтобы он посветлел.
+        -->
+        <ControlTemplate x:Key="ScrollBarThumbTemplate" TargetType="{x:Type Thumb}">
+            <Border x:Name="ThumbSurface"
+                    Background="{StaticResource ScrollBarThumbBrush}"
+                    CornerRadius="3"
+                    SnapsToDevicePixels="True" />
+            <ControlTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource TemplatedParent}}"
+                             Value="True">
+                    <Setter TargetName="ThumbSurface" Property="Background" Value="{StaticResource ScrollBarThumbHoverBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsDragging, RelativeSource={RelativeSource Self}}"
+                             Value="True">
+                    <Setter TargetName="ThumbSurface" Property="Background" Value="{StaticResource ScrollBarThumbPressedBrush}" />
+                </DataTrigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.35" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style x:Key="ScrollBarThumb" TargetType="{x:Type Thumb}">
+            <!--
+                Поля у бегунка не заданы: они одинаковы вдоль полосы и разные поперёк неё, то
+                есть свои у каждой ориентации. Заданы триггерами шаблона полосы.
+            -->
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="Template" Value="{StaticResource ScrollBarThumbTemplate}" />
+        </Style>
+
+        <ControlTemplate x:Key="ScrollBarTemplate" TargetType="{x:Type ScrollBar}">
+            <!--
+                Дорожка лежит в сетке: сам Track ничего не рисует, а красить дорожку нужно —
+                в тёмной теме она прозрачная, в светлой без неё бегунок повисает в воздухе.
+
+                Имя PART_Track обязательно: ScrollBar.OnApplyTemplate ищет дорожку только по
+                нему и без него тихо остаётся без полосы.
+
+                В Track кладётся именно Thumb, а не вложенная дорожка: тип у Track.Thumb один,
+                и вложенный Track в это место не годится.
+            -->
+            <Grid Background="{StaticResource ScrollBarTrackBrush}">
+                <Track x:Name="PART_Track">
+                    <Track.DecreaseRepeatButton>
+                        <RepeatButton Command="ScrollBar.PageUpCommand"
+                                      Delay="400"
+                                      Interval="80"
+                                      Style="{StaticResource ScrollBarPageButton}" />
+                    </Track.DecreaseRepeatButton>
+                    <Track.Thumb>
+                        <Thumb x:Name="PART_Thumb" Style="{StaticResource ScrollBarThumb}" />
+                    </Track.Thumb>
+                    <Track.IncreaseRepeatButton>
+                        <RepeatButton Command="ScrollBar.PageDownCommand"
+                                      Delay="400"
+                                      Interval="80"
+                                      Style="{StaticResource ScrollBarPageButton}" />
+                    </Track.IncreaseRepeatButton>
+                </Track>
+            </Grid>
+
+            <!--
+                Ориентация задана в обоих триггерах, а не по умолчанию: у Track она по
+                умолчанию горизонтальная, и вертикальная полоса без её явной установки
+                получила бы дорожку поперёк себя.
+
+                Разворот направления - обязательная часть, а не украшение: без него дорожка
+                идёт не в ту сторону и значение полосы читалось бы наоборот.
+
+                Поля бегунка - тоже по ориентации: отступ нужен поперёк полосы, чтобы
+                отодвинуть бегунок от краёв дорожки, и не нужен вдоль неё. Общими полями он
+                потерял бы шесть пикселей своей длины на горизонтальной полосе.
+            -->
+            <ControlTemplate.Triggers>
+                <Trigger Property="Orientation" Value="Vertical">
+                    <Setter TargetName="PART_Track" Property="Orientation" Value="Vertical" />
+                    <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="True" />
+                    <Setter TargetName="PART_Thumb" Property="Margin" Value="3,0" />
+                </Trigger>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter TargetName="PART_Track" Property="Orientation" Value="Horizontal" />
+                    <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
+                    <Setter TargetName="PART_Thumb" Property="Margin" Value="0,3" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style TargetType="{x:Type ScrollBar}">
+            <!--
+                12 px против системных 17: панель настроек шириной 330 px, и лишние пять
+                пикселей уходили под подписи настроек. Тонкая полоса здесь самое то, а в
+                поле сообщения, где текст моноширинный, ширина не значит ничего.
+            -->
+            <Setter Property="Width" Value="12" />
+            <Setter Property="MinWidth" Value="12" />
+            <Setter Property="Template" Value="{StaticResource ScrollBarTemplate}" />
+
+            <Style.Triggers>
+                <!--
+                    У горизонтальной полосы наоборот: ширина неограниченная, иначе она не
+                    растянулась бы вдоль прокручиваемой области, а толщина та же. Горизонтальных
+                    полос в приложении нет, но шаблон один на обе ориентации.
+                -->
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Width" Value="Auto" />
+                    <Setter Property="MinWidth" Value="0" />
+                    <Setter Property="Height" Value="12" />
+                    <Setter Property="MinHeight" Value="12" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+    </ResourceDictionary>
     </Application.Resources>
 </Application>

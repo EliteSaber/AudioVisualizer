@@ -141,6 +141,93 @@ public class SettingsMarkupTests
             "У попапа нет полей под тень: окно попапа обрежет её по своим границам.");
     }
 
+    [Fact]
+    public void БлокВыгрузки_НеПрокручивается()
+    {
+        // Блок выгрузки стоял последним в прокручиваемом списке и уезжал за верхний край
+        // панели ровно тогда, когда он и нужен: когда человек ждёт этапа выгрузки, полосы
+        // и кнопки отмены. Проверяется правило, а не картинка: вернуть блок внутрь
+        // ScrollViewer можно случайно, и в сборке это ничем не проявится.
+        var scroller = Scroller();
+
+        foreach (var binding in ExportBindings)
+        {
+            Assert.False(
+                Mentions(scroller, binding),
+                $"Привязка {binding} вернулась внутрь прокрутки: блок выгрузки снова уезжает за верхний край панели.");
+
+            Assert.True(
+                Mentions(ExportTab(), binding),
+                $"Привязка {binding} не найдена на вкладке выгрузки вовсе.");
+        }
+    }
+
+    [Fact]
+    public void БлокВыгрузки_СтоитПодПрокруткой()
+    {
+        // Прибитое место должно быть отдельной строкой под прокруткой. Ряд задан явно у
+        // обоих: без ScrollViewer в нулевой строке он растянулся бы на обе строки, и
+        // прибитый блок уехал бы под пределы вкладки вместе с настройками.
+        var grid = ExportTab().Elements().Single();
+
+        Assert.Equal("Grid", grid.Name.LocalName);
+
+        var heights = grid.Elements()
+            .Single(element => element.Name.LocalName == "Grid.RowDefinitions")
+            .Elements()
+            .Select(row => (string?)row.Attribute("Height") ?? string.Empty)
+            .ToArray();
+
+        Assert.Equal(["*", "Auto"], heights);
+
+        Assert.Equal("0", (string?)Scroller().Attribute("Grid.Row"));
+        Assert.Equal("1", (string?)Footer().Attribute("Grid.Row"));
+
+        // Место под полосу зарезервировано постоянно, а сама полоса появляется и пропадает:
+        // иначе прибитый блок вырос бы на её высоту в момент старта выгрузки, и кнопки
+        // уехали бы вверх прямо под рукой.
+        var progress = Footer().Descendants()
+            .Single(element => element.Name.LocalName == "ProgressBar");
+
+        var reserved = Assert.IsType<XElement>(progress.Parent);
+
+        Assert.False(
+            string.IsNullOrWhiteSpace((string?)reserved.Attribute("Height")),
+            "Под полосу прогресса не зарезервировано место: блок выгрузки прыгает при старте выгрузки.");
+    }
+
+    /// <summary>
+    /// Привязки блока выгрузки. Ищутся в любом атрибуте: по <c>Command</c>, <c>Value</c> и
+    /// <c>Text</c> по отдельности проверка разъехалась бы с разметкой при любой перестановке.
+    /// </summary>
+    private static readonly string[] ExportBindings =
+    [
+        "ExportVideoCommand",
+        "CancelExportCommand",
+        "ExportProgress",
+        "ExportProgressText"
+    ];
+
+    /// <summary>Вкладка выгрузки: ищется по <c>x:Name</c>, а не по заголовку.</summary>
+    private static XElement ExportTab()
+        => MainWindow().Descendants().Single(Named("ExportTab"));
+
+    /// <summary>Прибитый блок выгрузки: то же имя, только подпись границы.</summary>
+    private static XElement Footer()
+        => ExportTab().Descendants().Single(Named("ExportFooter"));
+
+    /// <summary>Прокручиваемая половина вкладки. Она единственная, вложенных нет.</summary>
+    private static XElement Scroller()
+        => ExportTab().Descendants().Single(element => element.Name.LocalName == "ScrollViewer");
+
+    /// <summary>Имя ищется по <c>Name.LocalName</c>: в разметке это <c>x:Name</c>.</summary>
+    private static Func<XElement, bool> Named(string name)
+        => element => element.Attributes().Any(attribute => attribute.Name.LocalName == "Name" && attribute.Value == name);
+
+    private static bool Mentions(XElement scope, string binding)
+        => scope.Descendants()
+            .Any(element => element.Attributes().Any(attribute => attribute.Value.Contains(binding, StringComparison.Ordinal)));
+
     /// <summary>
     /// Поверхность попапа списка: та, что залита кистью из словаря. Рамок подряд две, и обе
     /// прозрачные, так что признак один - ссылка на ресурс.

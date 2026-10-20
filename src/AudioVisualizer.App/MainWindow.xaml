@@ -81,6 +81,8 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <Button Width="44"
@@ -157,6 +159,59 @@
                        FontFamily="Consolas"
                        Foreground="{StaticResource MutedTextBrush}"
                        Text="{Binding TimeLabel}" />
+
+            <!--
+                TwoWay-привязка безопасна: ползунок двигает только человек, громкость при
+                запуске попадает в модель полем, минуя свойство, и затереть значение жеста
+                программа не может. Ноль и есть выключенный звук, отдельного состояния нет:
+                кнопка запоминает громкость до отключения и возвращает её назад.
+
+                TickFrequency обязателен: глобальный стиль включает привязку к тикам всем
+                ползункам, а умолчание WPF у TickFrequency - 1.0. Без явной частоты ползунок
+                0…1 щёлкает только краями: ноль или сто процентов. Позиция спасается тем,
+                что её тик - целая секунда, и уши это не замечают.
+            -->
+            <Button Grid.Column="4"
+                    Width="44"
+                    Height="34"
+                    Margin="12,0,0,0"
+                    IsEnabled="{Binding HasTrack}"
+                    Command="{Binding ToggleMuteCommand}">
+                <Button.Style>
+                    <Style TargetType="{x:Type Button}" BasedOn="{StaticResource IconButton}">
+                        <Setter Property="Content">
+                            <Setter.Value>
+                                <Path Style="{StaticResource IconPath}" Data="{StaticResource IconVolume}" />
+                            </Setter.Value>
+                        </Setter>
+                        <Setter Property="ToolTip" Value="Выключить звук" />
+                        <Setter Property="AutomationProperties.Name" Value="Выключить звук" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                <Setter Property="Content">
+                                    <Setter.Value>
+                                        <Path Style="{StaticResource IconPath}" Data="{StaticResource IconMute}" />
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter Property="ToolTip" Value="Включить звук" />
+                                <Setter Property="AutomationProperties.Name" Value="Включить звук" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <Slider Grid.Column="5"
+                    Width="90"
+                    Minimum="0"
+                    Maximum="1"
+                    Value="{Binding Volume}"
+                    TickFrequency="0.01"
+                    IsEnabled="{Binding HasTrack}"
+                    IsMoveToPointEnabled="True"
+                    VerticalAlignment="Center"
+                    ToolTip="{Binding VolumeLabel}"
+                    AutomationProperties.Name="{Binding VolumeLabel}" />
         </Grid>
 
         <!-- Превью и настройки -->

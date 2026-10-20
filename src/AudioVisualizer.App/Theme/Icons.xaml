@@ -56,6 +56,19 @@
 
     <Geometry x:Key="IconStop">M5,5 H19 V19 H5 Z</Geometry>
 
+    <!-- Громкость: динамик и две дуги волны. Двойной крест вместо дуг означает выключение. -->
+    <GeometryGroup x:Key="IconVolume">
+        <PathGeometry Figures="M5,9 H9 L14,4 V20 L9,15 H5 Z" />
+        <PathGeometry Figures="M16,9 Q19,12 16,15" />
+        <PathGeometry Figures="M18,6.5 Q22,12 18,17.5" />
+    </GeometryGroup>
+
+    <!-- Выключенный звук: динамик с крестом. -->
+    <GeometryGroup x:Key="IconMute">
+        <PathGeometry Figures="M5,9 H9 L14,4 V20 L9,15 H5 Z" />
+        <PathGeometry Figures="M16,9 L21,14 M21,9 L16,14" />
+    </GeometryGroup>
+
     <!-- Выгрузить: стрелка вниз на подставку. -->
     <Geometry x:Key="IconExport">M12,3 V14 M8,10 L12,14 L16,10 M4,19 H20</Geometry>
 

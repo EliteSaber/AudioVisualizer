@@ -21,11 +21,13 @@ internal sealed class FakeAudioPlayer : IAudioPlayer
 
     public string? PlayedPath { get; private set; }
 
+    public List<double> SetVolumes { get; } = [];
+
     public List<TimeSpan> Seeks { get; } = [];
 
     public Exception? PlayFailure { get; set; }
 
-    public void Play(string path, double volume)
+    public void Play(string path)
     {
         PlayCount++;
 
@@ -37,6 +39,8 @@ internal sealed class FakeAudioPlayer : IAudioPlayer
         PlayedPath = path;
         IsPlaying = true;
     }
+
+    public void SetVolume(double volume) => SetVolumes.Add(volume);
 
     public void Pause()
     {

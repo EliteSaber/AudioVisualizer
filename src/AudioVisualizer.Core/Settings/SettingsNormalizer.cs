@@ -27,7 +27,8 @@ public static class SettingsNormalizer
             Colors = settings.Colors ?? new ColorSettings(),
             Bars = NormalizeBars(settings.Bars ?? new BarSettings()),
             Spectrum = NormalizeSpectrum(settings.Spectrum ?? new SpectrumSettings()),
-            Export = NormalizeExport(settings.Export ?? new ExportSettings())
+            Export = NormalizeExport(settings.Export ?? new ExportSettings()),
+            Volume = Math.Clamp(settings.Volume, 0d, 1d)
         };
     }
 

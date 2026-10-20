@@ -23,7 +23,8 @@ public partial class IconButtonTests
     private static readonly string[] IconKeys =
     [
         "IconOpen", "IconSave", "IconSaveAs", "IconDelete", "IconReset",
-        "IconPlay", "IconPause", "IconStop", "IconExport", "IconCancel"
+        "IconPlay", "IconPause", "IconStop", "IconExport", "IconCancel",
+        "IconVolume", "IconMute"
     ];
 
     private static readonly Lazy<ResourceDictionary> AppStyles = new(() =>

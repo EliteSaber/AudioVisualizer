@@ -261,4 +261,12 @@ public class SettingsNormalizerTests
         Assert.Null(SettingsNormalizer.NormalizeExport(new ExportSettings { FfmpegPath = "   " }).FfmpegPath);
         Assert.Equal(@"C:\tools\ffmpeg.exe", SettingsNormalizer.NormalizeExport(new ExportSettings { FfmpegPath = " C:\\tools\\ffmpeg.exe " }).FfmpegPath);
     }
+
+    [Fact]
+    public void Normalize_Громкость_Ограничивается()
+    {
+        Assert.Equal(1d, SettingsNormalizer.Normalize(AppSettings.Default with { Volume = 5d }).Volume);
+        Assert.Equal(0d, SettingsNormalizer.Normalize(AppSettings.Default with { Volume = -2d }).Volume);
+        Assert.Equal(0.4d, SettingsNormalizer.Normalize(AppSettings.Default with { Volume = 0.4d }).Volume);
+    }
 }

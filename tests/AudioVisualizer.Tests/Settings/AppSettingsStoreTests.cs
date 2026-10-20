@@ -15,7 +15,8 @@ public class AppSettingsStoreTests
         Bars = new BarSettings { Width = 12, Spacing = 6, CornerStyle = CornerStyle.Rounded, FillMode = BarFillMode.Solid },
         Spectrum = new SpectrumSettings { FftSize = 2048, AnalysisBandCount = 128, GainDb = 3f },
         Export = new ExportSettings { Width = 1280, Height = 720, FramesPerSecond = 30, CodecPreset = "veryfast" },
-        QuietExport = true
+        QuietExport = true,
+        Volume = 0.4d
     };
 
     [Fact]

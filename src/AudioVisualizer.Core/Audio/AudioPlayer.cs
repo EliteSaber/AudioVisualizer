@@ -18,6 +18,7 @@ public sealed class AudioPlayer : IAudioPlayer
     private IAudioOutput? _output;
     private string? _openedPath;
     private TimeSpan _position;
+    private double _volume = 1d;
 
     public AudioPlayer(Func<string, IAudioTrack>? trackFactory = null, Func<IAudioOutput>? outputFactory = null)
     {
@@ -29,21 +30,31 @@ public sealed class AudioPlayer : IAudioPlayer
 
     public TimeSpan Position => _track?.Position ?? _position;
 
-    public void Play(string path, double volume)
+    public void Play(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         if (_track is not null && _openedPath == path)
         {
             // Возобновление после паузы: трек уже открыт, переоткрывать его не нужно.
-            _track.Volume = (float)Math.Clamp(volume, 0d, 1d);
+            _track.Volume = (float)_volume;
             _output!.Play();
             return;
         }
 
         ReleaseDevices();
-        OpenTrack(path, (float)Math.Clamp(volume, 0d, 1d), _position);
+        OpenTrack(path, _position);
         _output!.Play();
+    }
+
+    public void SetVolume(double volume)
+    {
+        _volume = Math.Clamp(volume, 0d, 1d);
+
+        if (_track is not null)
+        {
+            _track.Volume = (float)_volume;
+        }
     }
 
     public void Pause()
@@ -85,9 +96,9 @@ public sealed class AudioPlayer : IAudioPlayer
         // На живом потоке позиция меняется на уже прочитанном буфере: вывод продолжает
         // отдавать звук, взятый до перемотки, и сдвиг слышно только в отчётной позиции.
         // Пересоздание одного устройства вывода проверялось и не помогло - помогает
-        // только новый ридер, у которого буферы пусты.
+        // только новый ридер, у которого буферы пусты. Громкость остаётся в поле плеера,
+        // поэтому новый ридер открывается с той же.
         var path = _openedPath;
-        var volume = _track.Volume;
 
         ReleaseDevices();
 
@@ -96,7 +107,7 @@ public sealed class AudioPlayer : IAudioPlayer
             return;
         }
 
-        OpenTrack(path, volume, target);
+        OpenTrack(path, target);
         _output!.Play();
     }
 
@@ -111,10 +122,10 @@ public sealed class AudioPlayer : IAudioPlayer
     /// выставляется до инициализации вывода: иначе вывод успевает отдать первые кадры
     /// от начала файла.
     /// </summary>
-    private void OpenTrack(string path, float volume, TimeSpan startAt)
+    private void OpenTrack(string path, TimeSpan startAt)
     {
         _track = _trackFactory(path);
-        _track.Volume = volume;
+        _track.Volume = (float)_volume;
 
         if (startAt > TimeSpan.Zero)
         {

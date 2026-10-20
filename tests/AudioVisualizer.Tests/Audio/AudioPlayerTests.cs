@@ -15,7 +15,7 @@ public class AudioPlayerTests
     {
         var harness = new Harness();
 
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         Assert.Equal(1, harness.TracksCreated);
         Assert.Equal(1, harness.Output.InitCount);
@@ -27,10 +27,10 @@ public class AudioPlayerTests
     public void Play_ПоТомуЖеПути_НеПересоздаётТрек()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Player.Pause();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         Assert.Equal(1, harness.TracksCreated);
         Assert.Equal(2, harness.Output.PlayCount);
@@ -40,9 +40,9 @@ public class AudioPlayerTests
     public void Play_ПоДругомуПути_ОткрываетНовыйТрек()
     {
         var harness = new Harness();
-        harness.Player.Play("первый.mp3", 1d);
+        harness.Player.Play("первый.mp3");
 
-        harness.Player.Play("второй.mp3", 1d);
+        harness.Player.Play("второй.mp3");
 
         Assert.Equal(2, harness.TracksCreated);
     }
@@ -51,11 +51,11 @@ public class AudioPlayerTests
     public void Pause_ЗапоминаетПозицию_Play_ВозобновляетСНеё()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
         harness.Track.Position = TimeSpan.FromSeconds(42d);
 
         harness.Player.Pause();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         Assert.Equal(TimeSpan.FromSeconds(42d), harness.Track.Position);
         Assert.Equal(TimeSpan.FromSeconds(42d), harness.Player.Position);
@@ -65,15 +65,15 @@ public class AudioPlayerTests
     public void ДваЦиклаPlayPause_ВозобновлениеСПоследнейПаузы()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Track.Position = TimeSpan.FromSeconds(10d);
         harness.Player.Pause();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Track.Position = TimeSpan.FromSeconds(20d);
         harness.Player.Pause();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         Assert.Equal(TimeSpan.FromSeconds(20d), harness.Player.Position);
         Assert.Equal(1, harness.TracksCreated);
@@ -85,7 +85,7 @@ public class AudioPlayerTests
         var harness = new Harness();
 
         harness.Player.Seek(TimeSpan.FromSeconds(30d));
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         Assert.Equal(TimeSpan.FromSeconds(30d), harness.Track.Position);
     }
@@ -95,11 +95,11 @@ public class AudioPlayerTests
     {
         var harness = new Harness();
         harness.Player.Seek(TimeSpan.FromSeconds(30d));
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
         harness.Track.Position = TimeSpan.FromSeconds(35d);
 
         harness.Player.Pause();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         Assert.Equal(TimeSpan.FromSeconds(35d), harness.Player.Position);
         Assert.Equal(1, harness.TracksCreated);
@@ -109,7 +109,7 @@ public class AudioPlayerTests
     public void Seek_СохраняетВоспроизведение()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Player.Seek(TimeSpan.FromSeconds(15d));
 
@@ -120,7 +120,7 @@ public class AudioPlayerTests
     public void Seek_ОграничиваетПозициюДлительностью()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Player.Seek(TimeSpan.FromSeconds(500d));
 
@@ -131,7 +131,7 @@ public class AudioPlayerTests
     public void SeekВоВремяВоспроизведения_НеОстанавливаетВыводНавсегда()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Player.Seek(TimeSpan.FromSeconds(15d));
 
@@ -143,7 +143,7 @@ public class AudioPlayerTests
     public void SeekВоВремяВоспроизведения_ПереоткрываетТрек()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Player.Seek(TimeSpan.FromSeconds(15d));
 
@@ -158,7 +158,7 @@ public class AudioPlayerTests
     public void SeekПокаНаПаузе_ТрекНеПереоткрывает()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
         harness.Player.Pause();
 
         harness.Player.Seek(TimeSpan.FromSeconds(15d));
@@ -173,7 +173,8 @@ public class AudioPlayerTests
     public void SeekВоВремяВоспроизведения_СохраняетГромкость()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 0.4f);
+        harness.Player.Play("трек.mp3");
+        harness.Player.SetVolume(0.4d);
 
         harness.Player.Seek(TimeSpan.FromSeconds(15d));
 
@@ -181,14 +182,81 @@ public class AudioPlayerTests
     }
 
     [Fact]
+    public void SetVolumeДоЗапуска_ТрекОткрываетсяСГромкостью()
+    {
+        var harness = new Harness();
+        harness.Player.SetVolume(0.3d);
+
+        harness.Player.Play("трек.mp3");
+
+        Assert.Equal(0.3f, harness.Track.Volume);
+    }
+
+    [Fact]
+    public void SetVolumeПоВремяВоспроизведения_МеняетТрекСразу()
+    {
+        var harness = new Harness();
+        harness.Player.Play("трек.mp3");
+
+        harness.Player.SetVolume(0.5d);
+
+        // Переоткрытия быть не должно: громкость меняется на живом треке.
+        Assert.Equal(1, harness.TracksCreated);
+        Assert.Equal(0.5f, harness.Track.Volume);
+    }
+
+    [Fact]
+    public void SetVolume_ЗажимаетВДиапазон()
+    {
+        var harness = new Harness();
+        harness.Player.Play("трек.mp3");
+
+        harness.Player.SetVolume(5d);
+
+        Assert.Equal(1f, harness.Track.Volume);
+
+        harness.Player.SetVolume(-1d);
+
+        Assert.Equal(0f, harness.Track.Volume);
+    }
+
+    [Fact]
+    public void ВозобновлениеПоТомуЖеПути_СохраняетГромкость()
+    {
+        var harness = new Harness();
+        harness.Player.Play("трек.mp3");
+        harness.Player.SetVolume(0.4d);
+
+        harness.Player.Pause();
+        harness.Player.Play("трек.mp3");
+
+        Assert.Equal(0.4f, harness.Track.Volume);
+    }
+
+    [Fact]
+    public void StopPlayback_ГромкостьНеСбрасывает()
+    {
+        var harness = new Harness();
+        harness.Player.Play("трек.mp3");
+        harness.Player.SetVolume(0.4d);
+        harness.Player.StopPlayback();
+
+        harness.Player.Play("трек.mp3");
+
+        // Следующий трек открывается с последней громкостью: у обычных плееров
+        // громкость живёт дольше трека.
+        Assert.Equal(0.4f, harness.Track.Volume);
+    }
+
+    [Fact]
     public void SeekВоВремяВоспроизведения_ПродолжаетТотЖеФайл()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Player.Seek(TimeSpan.FromSeconds(15d));
         harness.Player.Pause();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         // После перемотки файл остался открытым: возобновление не должно открывать его
         // в третий раз.
@@ -209,7 +277,7 @@ public class AudioPlayerTests
     public void SeekОтрицательный_ВедётВНачало()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Player.Seek(TimeSpan.FromSeconds(-5d));
 
@@ -221,7 +289,7 @@ public class AudioPlayerTests
     {
         var harness = new Harness();
         harness.Player.Seek(TimeSpan.FromSeconds(30d));
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Player.StopPlayback();
 
@@ -233,7 +301,7 @@ public class AudioPlayerTests
     public void StopPlayback_ОсвобождаетУстройства()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Player.StopPlayback();
 
@@ -245,10 +313,10 @@ public class AudioPlayerTests
     public void StopPlayback_ПотомPlay_ОткрываетНовыйТрек()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
         harness.Player.StopPlayback();
 
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         Assert.Equal(2, harness.TracksCreated);
     }
@@ -268,14 +336,14 @@ public class AudioPlayerTests
     {
         var harness = new Harness();
 
-        Assert.Throws<ArgumentException>(() => harness.Player.Play("   ", 1d));
+        Assert.Throws<ArgumentException>(() => harness.Player.Play("   "));
     }
 
     [Fact]
     public void ПовторныйDispose_НеПадает()
     {
         var harness = new Harness();
-        harness.Player.Play("трек.mp3", 1d);
+        harness.Player.Play("трек.mp3");
 
         harness.Player.Dispose();
         harness.Player.Dispose();

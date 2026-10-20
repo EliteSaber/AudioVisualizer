@@ -22,13 +22,17 @@ public class MainViewModelTests
         return new TemporaryAudioFile(stream.ToArray());
     }
 
-    private static (MainViewModel ViewModel, TemporaryDirectory Directory) CreateViewModel(AppSettings? settings = null)
+    private static (MainViewModel ViewModel, TemporaryDirectory Directory) CreateViewModel(
+        AppSettings? settings = null,
+        IAudioPlayer? player = null)
     {
         var directory = new TemporaryDirectory();
         var store = new AppSettingsStore(directory.File("settings.json"));
         store.Save(settings ?? AppSettings.Default);
 
-        return (new MainViewModel(store), directory);
+        var viewModel = player is null ? new MainViewModel(store) : new MainViewModel(store, player: player);
+
+        return (viewModel, directory);
     }
 
     [Fact]
@@ -106,6 +110,123 @@ public class MainViewModelTests
             viewModel.ResetSettingsCommand.Execute(null);
 
             Assert.True(viewModel.SavePending);
+        }
+    }
+
+    [Fact]
+    public void Громкость_БерётсяИзФайла_ИИдётВПлеер()
+    {
+        var player = new FakeAudioPlayer();
+        var (viewModel, directory) = CreateViewModel(AppSettings.Default with { Volume = 0.4d }, player);
+        using (directory)
+        {
+            Assert.Equal(0.4d, viewModel.Volume);
+
+            // Плееру громкость нужна ещё до первого Play: открытый трек обязан звучать
+            // на той громкости, что стоит на ползунке, а не на умолчании.
+            Assert.Contains(0.4d, player.SetVolumes);
+        }
+    }
+
+    [Fact]
+    public void ПравкаГромкости_ИдётВПлеерИСтавитЗаписьВОчередь()
+    {
+        var player = new FakeAudioPlayer();
+        var (viewModel, directory) = CreateViewModel(player: player);
+        using (directory)
+        {
+            viewModel.Volume = 0.25d;
+
+            Assert.Equal(0.25d, player.SetVolumes[^1]);
+            Assert.True(viewModel.SavePending);
+        }
+    }
+
+    [Fact]
+    public void Громкость_СохраняетсяВФайл()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            viewModel.Volume = 0.25d;
+            viewModel.FlushSave();
+
+            Assert.Equal(0.25d, new AppSettingsStore(directory.File("settings.json")).Load().Volume);
+        }
+    }
+
+    [Fact]
+    public void ВыключениеЗвука_СбрасываетВНольИВозвращаетПрежнююГромкость()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            viewModel.Volume = 0.6d;
+
+            viewModel.ToggleMuteCommand.Execute(null);
+
+            Assert.Equal(0d, viewModel.Volume);
+            Assert.True(viewModel.IsMuted);
+
+            viewModel.ToggleMuteCommand.Execute(null);
+
+            Assert.Equal(0.6d, viewModel.Volume);
+            Assert.False(viewModel.IsMuted);
+        }
+    }
+
+    [Fact]
+    public void ЗапускСНулевойГромкостью_ВозвратЗвука_Полная()
+    {
+        var (viewModel, directory) = CreateViewModel(AppSettings.Default with { Volume = 0d });
+        using (directory)
+        {
+            Assert.True(viewModel.IsMuted);
+
+            // Прежняя громкость неизвестна: в файле ноль, и восстанавливать нечего - тогда
+            // возвращается полная.
+            viewModel.ToggleMuteCommand.Execute(null);
+
+            Assert.Equal(1d, viewModel.Volume);
+            Assert.False(viewModel.IsMuted);
+        }
+    }
+
+    [Fact]
+    public void Громкость_ВыходитВПодсказкуПроцентами()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            Assert.Equal("Громкость: 100%", viewModel.VolumeLabel);
+
+            viewModel.Volume = 0.25d;
+            Assert.Equal("Громкость: 25%", viewModel.VolumeLabel);
+
+            // Края подсказки обязаны быть читаемыми: ноль есть тишина, а не «0% звук».
+            viewModel.Volume = 0d;
+            Assert.Equal("Громкость: 0%", viewModel.VolumeLabel);
+
+            viewModel.Volume = 1d;
+            Assert.Equal("Громкость: 100%", viewModel.VolumeLabel);
+        }
+    }
+
+    [Fact]
+    public void ВыключениеЗвука_ОбновляетПодсказку()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            viewModel.Volume = 0.6d;
+
+            viewModel.ToggleMuteCommand.Execute(null);
+
+            Assert.Equal("Громкость: 0%", viewModel.VolumeLabel);
+
+            viewModel.ToggleMuteCommand.Execute(null);
+
+            Assert.Equal("Громкость: 60%", viewModel.VolumeLabel);
         }
     }
 

@@ -21,5 +21,15 @@ public sealed record AppSettings
     /// </remarks>
     public bool QuietExport { get; init; }
 
+    /// <summary>
+    /// Громкость прослушивания от нуля до единицы.
+    /// </summary>
+    /// <remarks>
+    /// Живёт рядом с <see cref="QuietExport"/> как свойство машины: ползунок отвечает только за
+    /// звук в этот момент, у аудиодорожки ролика громкость своя, и в пресеты выгрузки она
+    /// попасть не должна.
+    /// </remarks>
+    public double Volume { get; init; } = 1d;
+
     public static AppSettings Default { get; } = new();
 }

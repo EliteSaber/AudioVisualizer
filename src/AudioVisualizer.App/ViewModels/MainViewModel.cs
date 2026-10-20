@@ -72,8 +72,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var detectors = encoderDetector ?? new VideoEncoderDetector();
         _exporter = exporter ?? new Mp4Exporter(encoderDetector: detectors);
 
-        Settings = new SettingsViewModel(_store.Load(), presetStore, detectors);
+        var stored = _store.Load();
+
+        Settings = new SettingsViewModel(stored, presetStore, detectors);
         Settings.Changed += OnSettingsChanged;
+
+        // Громкость ставится полю напрямую, а не свойством: при загрузке она не правка
+        // пользователя, и отложенная запись из-за неё стартовать не должна. В плеер она
+        // идёт синхронно: иначе открытый после запуска трек звучал бы громче, чем стоит
+        // ползунок, до первого его движения.
+        _volume = stored.Volume;
+        _player.SetVolume(_volume);
 
         PreviewWidth = Settings.ExportWidth;
         PreviewHeight = Settings.ExportHeight;
@@ -151,6 +160,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Позиция в секундах. Публикуется окну через <see cref="PositionChanged"/>.</summary>
     [ObservableProperty] private double _positionSeconds;
 
+    /// <summary>Громкость прослушивания от нуля до единицы. Меняется только ползунком.</summary>
+    [ObservableProperty] private double _volume;
+
+    /// <summary>Громкость до отключения звука: при возврате должна встать та же.</summary>
+    private double _previousVolume = 1d;
+
+    /// <summary>
+    /// Включает ползунок громкости, а не убавляется до нуля: ноль хранит сам ползунок, и
+    /// зависшего состояния «звук тихо, но ползунок сбоку» не бывает.
+    /// </summary>
+    public bool IsMuted => Volume <= 0d;
+
+    /// <summary>
+    /// Подсказка ползунка громкости: значение в целых процентах, от нуля до ста. Проценты
+    /// целые потому ползунок и в процентах: тик 0,01 - это ровно один процент, а шумы
+    /// умножения снимаются округлением.
+    /// </summary>
+    public string VolumeLabel => $"Громкость: {Math.Round(Volume * 100d):0}%";
+
     /// <summary>
     /// Окно подписывается на позицию и само выставляет её ползунку.
     /// </summary>
@@ -223,6 +251,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public string TimeLabel => $"{TimeSpan.FromSeconds(PositionSeconds):mm\\:ss} / {Duration:mm\\:ss}";
 
+    /// <summary>
+    /// Убирает звук совсем и возвращает прежнюю громкость. Громкость до отключения хранится
+    /// в поле: восстановить на максимум наугад хуже, чем вернуть то, что было. Ноль после
+    /// запуска считается правкой пользователя, а не состоянием «звук был выключен».
+    /// </summary>
+    [RelayCommand]
+    private void ToggleMute()
+    {
+        if (Volume > 0d)
+        {
+            _previousVolume = Volume;
+            Volume = 0d;
+
+            return;
+        }
+
+        Volume = _previousVolume > 0d ? _previousVolume : 1d;
+    }
+
     [RelayCommand]
     private async Task OpenFile()
     {
@@ -245,7 +292,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void SaveSettings()
     {
-        if (_store.Save(Settings.ToAppSettings(), out var failure))
+        // Громкость подставляется здесь, а не в панели: SettingsViewModel её не правит, и
+        // перестройка источника кадров на её изменение запускаться не должна. Через
+        // with она попадает в файл вместе с остальными полями.
+        if (_store.Save(Settings.ToAppSettings() with { Volume = Volume }, out var failure))
         {
             _saveFailed = false;
 
@@ -533,6 +583,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnDurationChanged(TimeSpan value) => OnPropertyChanged(nameof(TimeLabel));
 
+    partial void OnVolumeChanged(double value)
+    {
+        // У открытого трека громкость меняется сразу; при закрытом плеер запомнит её для
+        // следующего Play. Запись отложенная: правка идёт на каждый шаг ползунка, файл на
+        // каждый шаг переписывать нельзя.
+        _player.SetVolume(value);
+        OnPropertyChanged(nameof(IsMuted));
+        OnPropertyChanged(nameof(VolumeLabel));
+        ScheduleSave();
+    }
+
     private void Play()
     {
         if (_audio is null || _audioPath is null)
@@ -546,7 +607,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            _player.Play(_audioPath, volume: 1d);
+            _player.Play(_audioPath);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

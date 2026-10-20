@@ -10,7 +10,13 @@ public interface IAudioPlayer : IDisposable
 
     TimeSpan Position { get; }
 
-    void Play(string path, double volume);
+    void Play(string path);
+
+    /// <summary>
+    /// Меняет громкость прослушивания. У открытого трека она меняется сразу, без
+    /// переоткрытия файла; при последующем Play трек открывается с последней громкостью.
+    /// </summary>
+    void SetVolume(double volume);
 
     void Pause();
 

@@ -269,4 +269,15 @@ public class SettingsNormalizerTests
         Assert.Equal(0d, SettingsNormalizer.Normalize(AppSettings.Default with { Volume = -2d }).Volume);
         Assert.Equal(0.4d, SettingsNormalizer.Normalize(AppSettings.Default with { Volume = 0.4d }).Volume);
     }
+
+    [Fact]
+    public void Normalize_Громкость_НеЧислоСтановитсяПолной()
+    {
+        // Math.Clamp на NaN возвращает NaN, а сравнения с ним ложны: значение проходит
+        // насквозь. Нормализатор - страховка файла, и нечисло должно становиться полной
+        // громкостью, а не NaN в плеере.
+        Assert.Equal(1d, SettingsNormalizer.Normalize(AppSettings.Default with { Volume = double.NaN }).Volume);
+        Assert.Equal(1d, SettingsNormalizer.Normalize(AppSettings.Default with { Volume = double.PositiveInfinity }).Volume);
+        Assert.Equal(1d, SettingsNormalizer.Normalize(AppSettings.Default with { Volume = double.NegativeInfinity }).Volume);
+    }
 }

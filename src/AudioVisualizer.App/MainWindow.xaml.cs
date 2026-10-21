@@ -44,6 +44,13 @@ public partial class MainWindow : Window
 
         PositionSlider.ValueChanged += OnPositionSliderValueChanged;
 
+        // Взятие ползунка громкости запоминается: пока человек ведёт его к нулю, модель
+        // видит десятки промежуточных значений, и без этого следа кнопка «включить звук»
+        // вернула бы после перетаскивания в ноль почти тишину. Туннельное событие нужно
+        // потому, что классовые обработчики Slider помечают мышь обработанной раньше
+        // присоединённых.
+        VolumeSlider.PreviewMouseLeftButtonDown += OnVolumeSliderMouseDown;
+
         // Ошибка показывается окном: подробности про ffmpeg и команда запуска не помещаются в
         // строку статуса, а она обрезает их многоточием. Пока окно закрывается, новые не
         // показываются: OnClosed отменяет выгрузку, и освобождение источников может дать
@@ -111,5 +118,13 @@ public partial class MainWindow : Window
         {
             viewModel.EndScrub(PositionSlider.Value);
         }
+    }
+
+    /// <summary>
+    /// Человек взялся за ползунок громкости: запоминаем уровень, с которого он начал.
+    /// </summary>
+    private void OnVolumeSliderMouseDown(object sender, MouseButtonEventArgs args)
+    {
+        (DataContext as MainViewModel)?.RememberVolume();
     }
 }

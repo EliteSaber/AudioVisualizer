@@ -84,6 +84,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _volume = stored.Volume;
         _player.SetVolume(_volume);
 
+        // Прежняя громкость для кнопки «включить звук» берётся из файла: в файле ноль -
+        // восстанавливать нечего, и тогда возвращается полная.
+        _previousVolume = stored.Volume > 0d ? stored.Volume : 1d;
+        _lastVolume = stored.Volume;
+        _volumeBeforeGesture = _previousVolume;
+
         PreviewWidth = Settings.ExportWidth;
         PreviewHeight = Settings.ExportHeight;
         UpdatePreview();
@@ -160,11 +166,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Позиция в секундах. Публикуется окну через <see cref="PositionChanged"/>.</summary>
     [ObservableProperty] private double _positionSeconds;
 
-    /// <summary>Громкость прослушивания от нуля до единицы. Меняется только ползунком.</summary>
+    /// <summary>
+    /// Громкость прослушивания от нуля до единицы. Меняют её ползунок, кнопка отключения
+    /// и сброс настроек.
+    /// </summary>
     [ObservableProperty] private double _volume;
 
     /// <summary>Громкость до отключения звука: при возврате должна встать та же.</summary>
     private double _previousVolume = 1d;
+
+    /// <summary>
+    /// Громкость, с которой человек уводит ползунок в ноль. Пока громкость падает, она
+    /// остаётся прежней: ползунок идёт к нулю десятками промежуточных значений, и «последняя
+    /// ненулевая» после такого жеста - это около нуля, а вернуть надо тот уровень, который
+    /// был у человека.
+    /// </summary>
+    private double _volumeBeforeGesture;
+
+    /// <summary>Предыдущее значение громкости: по нему видно, что громкость выросла.</summary>
+    private double _lastVolume;
 
     /// <summary>
     /// Включает ползунок громкости, а не убавляется до нуля: ноль хранит сам ползунок, и
@@ -261,8 +281,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         if (Volume > 0d)
         {
-            _previousVolume = Volume;
+            var muted = Volume;
+
+            // Обнуление идёт через свойство, а переход в ноль переписывает память о прежней
+            // громкости: след от жеста над ползунком. Кнопка знает громкость точно, и её
+            // значение важнее следа.
             Volume = 0d;
+            _previousVolume = muted;
 
             return;
         }
@@ -356,7 +381,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void ResetSettings() => Settings.Apply(SettingsNormalizer.Normalize(new AppSettings()));
+    private void ResetSettings()
+    {
+        var defaults = SettingsNormalizer.Normalize(new AppSettings());
+
+        Settings.Apply(defaults);
+
+        // Громкость живёт в модели, а не в панели, поэтому сброс панели её не трогал: после
+        // сброса звук мог остаться выключенным, хотя кнопка обещает «сбросить все настройки».
+        Volume = defaults.Volume;
+    }
 
     [RelayCommand]
     private void TogglePlay()
@@ -548,6 +582,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Запоминает громкость в тот момент, когда человек взялся за ползунок.
+    /// </summary>
+    /// <remarks>
+    /// Вызывается окном: момент взятия снаружи модели не виден, а громкость к этому времени
+    /// могла долго стоять на одном уровне, и «последний подъём» был давным-давно.
+    /// </remarks>
+    public void RememberVolume() => _volumeBeforeGesture = Volume;
+
+    /// <summary>
     /// Пересчитывает кадр по текущей позиции воспроизведения. Запускается таймером; вынесено
     /// отдельно, чтобы ту же логику можно было проверить тестом без звуковой карты.
     /// </summary>
@@ -592,6 +635,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsMuted));
         OnPropertyChanged(nameof(VolumeLabel));
         ScheduleSave();
+
+        var previous = _lastVolume;
+        _lastVolume = value;
+
+        // Громкость выросла - значит, человек поднял её своими руками, и с этого уровня он
+        // и пойдёт вниз, если заглушит звук. Пока громкость падает, уровень остаётся
+        // прежним: ползунок идёт к нулю десятками промежуточных значений.
+        if (value > previous)
+        {
+            _volumeBeforeGesture = value;
+        }
+
+        // Ноль на ползунке - это выключенный звук, и кнопка «включить звук» должна вернуть
+        // тот уровень, с которого человек уводил ползунок в ноль, а не последний ненулевой.
+        if (value <= 0d && _volumeBeforeGesture > 0d)
+        {
+            _previousVolume = _volumeBeforeGesture;
+        }
     }
 
     private void Play()

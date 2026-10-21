@@ -28,7 +28,11 @@ public static class SettingsNormalizer
             Bars = NormalizeBars(settings.Bars ?? new BarSettings()),
             Spectrum = NormalizeSpectrum(settings.Spectrum ?? new SpectrumSettings()),
             Export = NormalizeExport(settings.Export ?? new ExportSettings()),
-            Volume = Math.Clamp(settings.Volume, 0d, 1d)
+
+            // Math.Clamp на NaN возвращает NaN, а приведение к короткому числу не определено:
+            // нормализатор - страховка файла, и нечисло в громкости должно становиться
+            // полной громкостью, а не NaN в плеере.
+            Volume = double.IsFinite(settings.Volume) ? Math.Clamp(settings.Volume, 0d, 1d) : 1d
         };
     }
 

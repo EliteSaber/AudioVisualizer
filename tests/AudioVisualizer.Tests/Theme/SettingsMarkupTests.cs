@@ -199,10 +199,7 @@ public class SettingsMarkupTests
     [Fact]
     public void ПолзунокГромкости_ЗадаётЧастотуТиков()
     {
-        var slider = MainWindow()
-            .Descendants()
-            .Single(element => element.Name.LocalName == "Slider"
-                && (string?)element.Attribute("Value") == "{Binding Volume}");
+        var slider = VolumeSlider();
 
         // Глобальный стиль ползунков включает привязку к тикам всем, а у TickFrequency в WPF
         // умолчание 1.0: без явной частоты ползунок 0…1 щёлкает только краями - ноль или
@@ -210,6 +207,31 @@ public class SettingsMarkupTests
         // грабли спасает только масштаб: у него тик - целая секунда, и уши его не замечают.
         Assert.Equal("0.01", (string?)slider.Attribute("TickFrequency"));
     }
+
+    [Fact]
+    public void ПолзунокГромкости_ЗадаётШагКлавиш()
+    {
+        var slider = VolumeSlider();
+
+        // У RangeBase LargeChange по умолчанию 1, а у ползунка 0…1 это PageUp с нуля на
+        // сто процентов. SmallChange в умолчании 0.1 - это десять процентов на стрелку,
+        // для громкости слишком много.
+        Assert.Equal("0.01", (string?)slider.Attribute("SmallChange"));
+        Assert.Equal("0.1", (string?)slider.Attribute("LargeChange"));
+    }
+
+    [Fact]
+    public void ПолзунокГромкости_ИмяПостоянное()
+    {
+        // Имя элемента для чтения с экрана не должно меняться вместе со значением: значение
+        // ползунка и так объявляется само, а имя с процентом внутри только шумит.
+        Assert.Equal("Громкость", (string?)VolumeSlider().Attribute("AutomationProperties.Name"));
+    }
+
+    /// <summary>Ползунок громкости: ищется по привязке, а не по имени.</summary>
+    private static XElement VolumeSlider()
+        => MainWindow().Descendants().Single(element => element.Name.LocalName == "Slider"
+            && (string?)element.Attribute("Value") == "{Binding Volume}");
 
     /// <summary>
     /// Привязки блока выгрузки. Ищутся в любом атрибуте: по <c>Command</c>, <c>Value</c> и

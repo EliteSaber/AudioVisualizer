@@ -193,6 +193,86 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void ГромкостьУНуляЧерезПолзунок_КнопкаВозвращаетПрежнюю()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            viewModel.Volume = 0.3d;
+
+            // Взятие ползунка запоминает уровень: к моменту, когда громкость станет нулём,
+            // промежуточных значений будет много, а вернуть надо тот, что был у человека.
+            viewModel.RememberVolume();
+            viewModel.Volume = 0d;
+
+            Assert.True(viewModel.IsMuted);
+
+            viewModel.ToggleMuteCommand.Execute(null);
+
+            Assert.Equal(0.3d, viewModel.Volume);
+        }
+    }
+
+    [Fact]
+    public void ПромежуточныеЗначенияПолзунка_НеМешаютВозвратуГромкости()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            viewModel.Volume = 0.3d;
+            viewModel.RememberVolume();
+
+            // Перетаскивание в ноль идёт десятками значений, и последнее ненулевое из них -
+            // это процент. Вернуть его - значит включить почти тишину.
+            foreach (var value in new[] { 0.29d, 0.15d, 0.07d, 0.01d, 0d })
+            {
+                viewModel.Volume = value;
+            }
+
+            viewModel.ToggleMuteCommand.Execute(null);
+
+            Assert.Equal(0.3d, viewModel.Volume);
+        }
+    }
+
+    [Fact]
+    public void ВыключениеЗвука_ПослеУменьшения_ВозвращаетТочнуюГромкость()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            viewModel.Volume = 1d;
+            viewModel.Volume = 0.6d;
+
+            // Кнопка знает громкость точно, и её значение важнее следа от ползунка: тот помнит
+            // уровень, с которого громкость последний раз поднимали.
+            viewModel.ToggleMuteCommand.Execute(null);
+            Assert.Equal(0d, viewModel.Volume);
+
+            viewModel.ToggleMuteCommand.Execute(null);
+
+            Assert.Equal(0.6d, viewModel.Volume);
+        }
+    }
+
+    [Fact]
+    public void СбросНастроек_ВозвращаетПолнуюГромкость()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            viewModel.Volume = 0d;
+
+            // Громкость живёт в модели, а не в панели, поэтому сброс панели её не трогал:
+            // после сброса звук оставался выключенным, хотя кнопка обещает «сбросить все
+            // настройки».
+            viewModel.ResetSettingsCommand.Execute(null);
+
+            Assert.Equal(1d, viewModel.Volume);
+        }
+    }
+
+    [Fact]
     public void Громкость_ВыходитВПодсказкуПроцентами()
     {
         var (viewModel, directory) = CreateViewModel();

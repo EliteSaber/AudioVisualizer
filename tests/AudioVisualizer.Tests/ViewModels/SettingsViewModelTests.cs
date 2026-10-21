@@ -182,6 +182,20 @@ public class SettingsViewModelTests
     }
 
     [Fact]
+    public void ЭквалайзерВЗвуке_ДоезжаетВНастройкиИОбратно()
+    {
+        var viewModel = Create();
+
+        // Галочка живёт рядом с полосами: она решает, меняют ли они звук, и без полос
+        // в пресете ролика ей самое место.
+        viewModel.ApplyEqualizerToAudio = true;
+        Assert.True(viewModel.ToAppSettings().Spectrum.ApplyEqualizerToAudio);
+
+        viewModel.Apply(AppSettings.Default);
+        Assert.False(viewModel.ApplyEqualizerToAudio);
+    }
+
+    [Fact]
     public void ВыборПресетa_НеСбрасываетсяОтСвоихПолей()
     {
         var viewModel = Create();

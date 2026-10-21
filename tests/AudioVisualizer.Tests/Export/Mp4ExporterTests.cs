@@ -496,6 +496,143 @@ public class Mp4ExporterTests
         }
     }
 
+    /// <summary>
+    /// Выгрузка со стерео-исходником: звук ролика должен остаться стерео.
+    /// </summary>
+    /// <remarks>
+    /// Раньше звук ролика брался из моно-микса, на котором построен спектр: свод каналов
+    /// теряет 3 дБ и вычитает фазу на разнесённых дорожках.
+    /// </remarks>
+    [Fact]
+    public async Task ВыгрузкаСтереоИсходника_ДаётСтереоЗвук()
+    {
+        var ffmpeg = new FfmpegLocator().Locate();
+
+        if (ffmpeg is null)
+        {
+            return;
+        }
+
+        var directory = Directory.CreateTempSubdirectory("av-export-stereo-");
+        var output = Path.Combine(directory.FullName, "итог.mp4");
+
+        try
+        {
+            var source = Path.Combine(directory.FullName, "источник.wav");
+            File.WriteAllBytes(source, StereoWav(44100));
+
+            var settings = new AppSettings
+            {
+                Export = new ExportSettings
+                {
+                    Width = 320,
+                    Height = 240,
+                    FramesPerSecond = 15,
+                    Crf = 30,
+                    CodecPreset = "ultrafast",
+                    FfmpegPath = ffmpeg
+                },
+                Bars = new BarSettings { Width = 8, Spacing = 4, CornerRadius = 0, Margin = 8, CenterGap = 4 }
+            };
+
+            var exporter = new Mp4Exporter();
+            var result = await exporter.ExportAsync(
+                new VideoExportRequest(Audio(), settings, output, source),
+                progress: null,
+                CancellationToken.None);
+
+            Assert.False(result.FellBackToMono);
+            Assert.True(File.Exists(output));
+            Assert.Equal(2, AudioChannels(output));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Исходник недоступен: ролик всё равно собирается, но из моно-микса, и выгрузка
+    /// обязана об этом сказать.
+    /// </summary>
+    [Fact]
+    public async Task ВыгрузкаСНедоступнымИсходником_ОткатываетсяНаМоно()
+    {
+        var ffmpeg = new FfmpegLocator().Locate();
+
+        if (ffmpeg is null)
+        {
+            return;
+        }
+
+        var directory = Directory.CreateTempSubdirectory("av-export-mono-");
+        var output = Path.Combine(directory.FullName, "итог.mp4");
+
+        try
+        {
+            var settings = new AppSettings
+            {
+                Export = new ExportSettings
+                {
+                    Width = 320,
+                    Height = 240,
+                    FramesPerSecond = 15,
+                    Crf = 30,
+                    CodecPreset = "ultrafast",
+                    FfmpegPath = ffmpeg
+                },
+                Bars = new BarSettings { Width = 8, Spacing = 4, CornerRadius = 0, Margin = 8, CenterGap = 4 }
+            };
+
+            var exporter = new Mp4Exporter();
+            var result = await exporter.ExportAsync(
+                new VideoExportRequest(Audio(), settings, output, Path.Combine(directory.FullName, "нет-такого.wav")),
+                progress: null,
+                CancellationToken.None);
+
+            Assert.True(result.FellBackToMono);
+            Assert.True(File.Exists(output));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>Стерео-WAV: слева синус, справа - противофазный, свод даёт тишину.</summary>
+    private static byte[] StereoWav(int sampleRate)
+    {
+        var frames = sampleRate;
+        var samples = new float[frames * 2];
+
+        for (var i = 0; i < frames; i++)
+        {
+            var value = 0.5f * MathF.Sin(2f * MathF.PI * 440f * i / sampleRate);
+            samples[i * 2] = value;
+            samples[(i * 2) + 1] = -value;
+        }
+
+        using var stream = new MemoryStream();
+        WavCodec.WritePcm16(stream, samples, sampleRate, 2);
+
+        return stream.ToArray();
+    }
+
+    /// <summary>
+    /// Число каналов аудиодорожки mp4: в записи 'mp4a' счётчик каналов лежит на 20-м байте
+    /// от начала её названия. Формат mp4 многобайтовый, и числа в нём записаны старшим
+    /// байтом вперёд.
+    /// </summary>
+    private static int AudioChannels(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        var index = bytes.AsSpan().IndexOf("mp4a"u8);
+
+        Assert.True(index > 0, "В mp4 не найдена аудиодорожка.");
+
+        return (bytes[index + 20] << 8) | bytes[index + 21];
+    }
+
     /// <summary>Синус 440 Гц нужной длины: спектр ненулевой, и в mp4 попадает и звук, и картинка.</summary>
     private static AudioData Audio(TimeSpan? duration = null)
     {

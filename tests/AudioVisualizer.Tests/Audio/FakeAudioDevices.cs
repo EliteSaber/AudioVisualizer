@@ -1,4 +1,5 @@
 using AudioVisualizer.Core.Audio;
+using AudioVisualizer.Core.Settings;
 using NAudio.Wave;
 
 namespace AudioVisualizer.Tests.Audio;
@@ -22,7 +23,18 @@ internal sealed class FakeAudioTrack : IAudioTrack
 
     public WaveFormat WaveFormat { get; } = new(44100, 16, 1);
 
+    /// <summary>Какие полосы эквалайзера задавали треку и в каком порядке.</summary>
+    public List<IReadOnlyList<EqualizerBand>> Equalizers { get; } = [];
+
+    public bool EqualizerEnabled { get; private set; }
+
     public int Read(Span<byte> buffer) => 0;
+
+    public void SetEqualizer(IReadOnlyList<EqualizerBand> bands, bool enabled)
+    {
+        Equalizers.Add(bands);
+        EqualizerEnabled = enabled;
+    }
 
     public void Dispose() => IsDisposed = true;
 }

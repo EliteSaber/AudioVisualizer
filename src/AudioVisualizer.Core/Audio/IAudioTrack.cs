@@ -1,3 +1,4 @@
+using AudioVisualizer.Core.Settings;
 using NAudio.Wave;
 
 namespace AudioVisualizer.Core.Audio;
@@ -17,4 +18,11 @@ public interface IAudioTrack : IWaveProvider, IDisposable
     TimeSpan Duration { get; }
 
     float Volume { get; set; }
+
+    /// <summary>
+    /// Задаёт полосы эквалайзера для звука при воспроизведении.
+    /// </summary>
+    /// <param name="bands">Полосы: центральная частота и усиление.</param>
+    /// <param name="enabled">Включён ли эквалайзер. Выключенный звук идёт без обработки.</param>
+    void SetEqualizer(IReadOnlyList<EqualizerBand> bands, bool enabled);
 }

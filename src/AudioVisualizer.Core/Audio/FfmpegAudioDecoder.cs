@@ -14,6 +14,27 @@ public static class FfmpegAudioDecoder
 
     public static async Task<AudioData> DecodeAsync(string path, string ffmpegPath, CancellationToken cancellationToken = default)
     {
+        using var stream = await DecodeWavAsync(path, ffmpegPath, cancellationToken).ConfigureAwait(false);
+
+        return WavCodec.Read(stream);
+    }
+
+    /// <summary>
+    /// Декодирование с сохранением каналов: сэмплы идут чересполосно.
+    /// </summary>
+    /// <remarks>
+    /// Команда ffmpeg не меняется: число каналов в ней и так не задавалось, а свод делал
+    /// разбор WAV. Теперь разбор сохраняет каналы, и звук ролика остаётся как в исходнике.
+    /// </remarks>
+    public static async Task<ChannelAudio> DecodeChannelsAsync(string path, string ffmpegPath, CancellationToken cancellationToken = default)
+    {
+        using var stream = await DecodeWavAsync(path, ffmpegPath, cancellationToken).ConfigureAwait(false);
+
+        return WavCodec.ReadInterleaved(stream);
+    }
+
+    private static async Task<MemoryStream> DecodeWavAsync(string path, string ffmpegPath, CancellationToken cancellationToken)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentException.ThrowIfNullOrWhiteSpace(ffmpegPath);
 
@@ -46,7 +67,9 @@ foreach (var argument in new[]
             throw new AudioDecodeException($"Не удалось запустить ffmpeg по пути \"{ffmpegPath}\".");
         }
 
-        using var output = new MemoryStream();
+        // Поток не закрывается здесь: его читает вызывающий, и закрытый поток ffmpeg
+        // остался бы в виде «прочитанного, но нечитаемого».
+        var output = new MemoryStream();
         var error = new StringBuilder();
 
         // stderr читаем параллельно: иначе процесс встанет, когда pipes переполнятся.
@@ -67,7 +90,7 @@ foreach (var argument in new[]
         }
 
         output.Position = 0;
-        return WavCodec.Read(output);
+        return output;
     }
 
     private static void KillQuietly(Process process)

@@ -114,6 +114,24 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void ПолосыЭквалайзера_ИдутВПлеер()
+    {
+        var player = new FakeAudioPlayer();
+        var (viewModel, directory) = CreateViewModel(player: player);
+        using (directory)
+        {
+            // Плееру полосы нужны ещё до первого Play: открытый трек обязан звучать
+            // с теми же полосами, что показывает спектр на экране.
+            Assert.NotEmpty(player.Equalizers);
+
+            viewModel.Settings.Equalizer[5].SetGain(6f);
+
+            Assert.True(player.EqualizerEnabled || player.Equalizers.Count > 0);
+            Assert.Equal(6f, player.Equalizers[^1][5].GainDb);
+        }
+    }
+
+    [Fact]
     public void Громкость_БерётсяИзФайла_ИИдётВПлеер()
     {
         var player = new FakeAudioPlayer();

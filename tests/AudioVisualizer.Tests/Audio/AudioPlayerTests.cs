@@ -1,4 +1,5 @@
 using AudioVisualizer.Core.Audio;
+using AudioVisualizer.Core.Settings;
 
 namespace AudioVisualizer.Tests.Audio;
 
@@ -347,6 +348,59 @@ public class AudioPlayerTests
 
         harness.Player.Dispose();
         harness.Player.Dispose();
+    }
+
+    [Fact]
+    public void SetEqualizer_ДоPlay_ПолосыДоходятДоТрека()
+    {
+        var harness = new Harness();
+        harness.Player.SetEqualizer([new EqualizerBand(1000f, 6f)], true);
+
+        harness.Player.Play("трек.mp3");
+
+        Assert.True(harness.Track.EqualizerEnabled);
+        Assert.Single(harness.Track.Equalizers);
+        Assert.Equal(6f, harness.Track.Equalizers[0][0].GainDb);
+    }
+
+    [Fact]
+    public void SetEqualizer_ПриИгре_ПолосыДоходятДоТрека_БезПереоткрытия()
+    {
+        var harness = new Harness();
+        harness.Player.Play("трек.mp3");
+
+        harness.Player.SetEqualizer([new EqualizerBand(1000f, 6f)], true);
+
+        // Файл при смене полос не переоткрывается: переоткрытие сбило бы звук.
+        Assert.Equal(1, harness.TracksCreated);
+        Assert.True(harness.Track.EqualizerEnabled);
+    }
+
+    [Fact]
+    public void SetEqualizer_ПослеПеремотки_ПолосыОстаютсяУНовогоТрека()
+    {
+        // Перемотка при живом воспроизведении переоткрывает файл, и новый трек обязан
+        // получить те же полосы.
+        var harness = new Harness();
+        harness.Player.SetEqualizer([new EqualizerBand(1000f, 6f)], true);
+        harness.Player.Play("трек.mp3");
+
+        harness.Player.Seek(TimeSpan.FromSeconds(30d));
+
+        Assert.Equal(2, harness.TracksCreated);
+        Assert.True(harness.Track.EqualizerEnabled);
+    }
+
+    [Fact]
+    public void SetEqualizer_Выключенный_УбираетОбработку()
+    {
+        var harness = new Harness();
+        harness.Player.SetEqualizer([new EqualizerBand(1000f, 6f)], true);
+        harness.Player.Play("трек.mp3");
+
+        harness.Player.SetEqualizer([new EqualizerBand(1000f, 6f)], false);
+
+        Assert.False(harness.Track.EqualizerEnabled);
     }
 
     private sealed class Harness

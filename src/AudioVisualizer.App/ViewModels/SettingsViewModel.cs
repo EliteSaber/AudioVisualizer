@@ -187,6 +187,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private double _attack;
     [ObservableProperty] private double _release;
 
+    /// <summary>
+    /// Меняют ли полосы эквалайзера звук. По умолчанию нет: эквалайзер остаётся
+    /// визуальным, пока человек сам не включит его.
+    /// </summary>
+    [ObservableProperty] private bool _applyEqualizerToAudio;
+
     [ObservableProperty] private int _exportWidth;
     [ObservableProperty] private int _exportHeight;
     [ObservableProperty] private int _exportFramesPerSecond;
@@ -255,6 +261,7 @@ CenterGap = BarCenterGap,
             Gamma = (float)Gamma,
             Attack = (float)Attack,
             Release = (float)Release,
+            ApplyEqualizerToAudio = ApplyEqualizerToAudio,
             Equalizer = Equalizer.Select(band => new EqualizerBand(band.CenterFrequencyHz, band.GainDb)).ToArray()
         },
         Export = new ExportSettings
@@ -314,6 +321,7 @@ BarCenterGap = settings.Bars.CenterGap;
             Gamma = spectrum.Gamma;
             Attack = spectrum.Attack;
             Release = spectrum.Release;
+            ApplyEqualizerToAudio = spectrum.ApplyEqualizerToAudio;
 
             ExportWidth = settings.Export.Width;
             ExportHeight = settings.Export.Height;

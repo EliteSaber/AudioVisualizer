@@ -394,7 +394,21 @@
                                     <Slider Minimum="0.02" Maximum="1" TickFrequency="0.02" Value="{Binding Settings.Release, Mode=TwoWay}" />
                                 </controls:SettingRow>
 
-                                <TextBlock Text="Визуальный эквалайзер" Style="{StaticResource SectionHeader}" />
+                                <TextBlock Text="Эквалайзер" Style="{StaticResource SectionHeader}" />
+
+                                <!--
+                                    Полосы гнут форму спектра всегда, а звук меняют только с этой
+                                    галочкой: без неё эквалайзер остаётся картинкой. Подсказка
+                                    стоит на строке, а не на самом чекбоксе: ToolTipService
+                                    показывает подсказку предка, и текст остаётся в одном месте.
+                                -->
+                                <controls:SettingRow Label="Эквалайзер в звуке"
+                                                    ToolTip="Полосы эквалайзера меняют звук в превью и в ролике">
+                                    <CheckBox IsChecked="{Binding Settings.ApplyEqualizerToAudio, Mode=TwoWay}"
+                                              Foreground="{StaticResource TextBrush}"
+                                              VerticalAlignment="Bottom" />
+                                </controls:SettingRow>
+
                                 <ItemsControl ItemsSource="{Binding Settings.Equalizer}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>

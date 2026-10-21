@@ -43,6 +43,20 @@ public sealed record SpectrumSettings
 
     public IReadOnlyList<EqualizerBand> Equalizer { get; init; } = DefaultEqualizer;
 
+    /// <summary>
+    /// Меняют ли полосы эквалайзера звук: в превью и в аудиодорожке выгруженного ролика.
+    /// </summary>
+    /// <remarks>
+    /// Живёт рядом с полосами, а не в <see cref="ExportSettings"/>: тот уезжает в пресеты
+    /// ролика целиком, а полосы в пресеты не попадают, и пресет «эквалайзер в звуке» без
+    /// значений полос был бы враньём.
+    /// <para>
+    /// В сравнение настроек спектра не входит: равенство решает, пересобирать ли источник
+    /// кадров, а флаг спектр не меняет - как не меняют его атака и спад.
+    /// </para>
+    /// </remarks>
+    public bool ApplyEqualizerToAudio { get; init; }
+
     public static SpectrumSettings Default { get; } = new();
 
     /// <summary>

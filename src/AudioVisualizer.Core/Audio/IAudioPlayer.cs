@@ -1,3 +1,5 @@
+using AudioVisualizer.Core.Settings;
+
 namespace AudioVisualizer.Core.Audio;
 
 /// <summary>
@@ -17,6 +19,12 @@ public interface IAudioPlayer : IDisposable
     /// переоткрытия файла; при последующем Play трек открывается с последней громкостью.
     /// </summary>
     void SetVolume(double volume);
+
+    /// <summary>
+    /// Задаёт полосы эквалайзера. У открытого трека полосы меняются сразу, файл при этом
+    /// не переоткрывается; при последующем Play трек открывается с теми же полосами.
+    /// </summary>
+    void SetEqualizer(IReadOnlyList<EqualizerBand> bands, bool enabled);
 
     void Pause();
 

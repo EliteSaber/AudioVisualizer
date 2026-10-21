@@ -7,11 +7,21 @@ namespace AudioVisualizer.Core.Export;
 /// Запрос на выгрузку видео.
 /// </summary>
 /// <param name="Audio">
-/// Декодированный трек: из него берётся и спектр для кадров, и аудиодорожка mp4.
+/// Декодированный трек: из него берётся спектр для кадров. Аудиодорожка ролика собирается
+/// отдельно - по исходнику с каналами, - если исходник указан.
 /// </param>
 /// <param name="Settings">Настройки оформления и параметры экспорта. Нормализуются внутри экспортёра.</param>
 /// <param name="OutputPath">Путь итогового mp4.</param>
-public sealed record VideoExportRequest(AudioData Audio, AppSettings Settings, string OutputPath);
+/// <param name="AudioPath">
+/// Путь к исходному файлу. По нему выгрузка берёт звук с каналами: моно-микс, на котором
+/// построен спектр, теряет на своде 3 дБ и местами вычитает фазу. Пустой путь - звук
+/// ролика будет взят из <paramref name="Audio"/>.
+/// </param>
+public sealed record VideoExportRequest(
+    AudioData Audio,
+    AppSettings Settings,
+    string OutputPath,
+    string? AudioPath = null);
 
 /// <summary>Ход выгрузки: сколько кадров готово, сколько всего и сколько осталось примерно.</summary>
 /// <param name="FramesDone">Готовые кадры.</param>
@@ -42,7 +52,11 @@ public sealed record VideoExportProgress(int FramesDone, int TotalFrames, TimeSp
 /// <param name="FellBackToCpu">
 /// Просили кодировать видеокартой, а кодировала процессорная: карты не нашлось или она не
 /// умеет выбранный кодек. Выгрузка от этого не хуже, но сказать о ней надо, иначе настройка
-/// молча не сделала того, чего просили.
+/// молча не сделала того, о чём просили.
+/// </param>
+/// <param name="FellBackToMono">
+/// Исходник прочитать не удалось, и звук ролика собран из моно-микса: он тише исходника
+/// на 3 дБ и без пространства. Выгрузка от этого не хуже, но сказать о ней надо.
 /// </param>
 public sealed record VideoExportResult(
     string Path,
@@ -50,7 +64,8 @@ public sealed record VideoExportResult(
     TimeSpan Elapsed,
     bool Cancelled = false,
     string? Encoder = null,
-    bool FellBackToCpu = false);
+    bool FellBackToCpu = false,
+    bool FellBackToMono = false);
 
 /// <summary>
 /// Выгрузка не удалась: ffmpeg не найден, вернул ошибку или не смог записать файл.

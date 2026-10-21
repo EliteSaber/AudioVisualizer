@@ -43,6 +43,54 @@ public class WavCodecTests
     }
 
     [Fact]
+    public void WritePcm16_Стерео_ПишетЧислоКаналовВЗаголовке()
+    {
+        // Байт в секунду и размер кадра считаются по числу каналов: без этого ffmpeg
+        // прочитает стерео-файл как сдвинутый на полкадра.
+        using var stream = new MemoryStream();
+        WavCodec.WritePcm16(stream, [0.5f, -0.5f, 0.25f, -0.25f], 44100, 2);
+
+        var bytes = stream.ToArray();
+
+        Assert.Equal(2, BitConverter.ToInt16(bytes, 22));
+        Assert.Equal(44100 * 2 * 2, BitConverter.ToInt32(bytes, 28));
+        Assert.Equal(4, BitConverter.ToInt16(bytes, 32));
+    }
+
+    [Fact]
+    public void WritePcm16_ИReadInterleaved_СохраняютКаналы()
+    {
+        float[] original = [0.5f, -0.5f, 0.25f, -0.25f, 0f, 0f];
+
+        using var stream = new MemoryStream();
+        WavCodec.WritePcm16(stream, original, 44100, 2);
+
+        stream.Position = 0;
+        var result = WavCodec.ReadInterleaved(stream);
+
+        Assert.Equal(2, result.Channels);
+        Assert.Equal(3, result.FrameCount);
+
+        for (var i = 0; i < original.Length; i++)
+        {
+            Assert.InRange(result.Samples[i], original[i] - 0.0001f, original[i] + 0.0001f);
+        }
+    }
+
+    [Fact]
+    public void ReadInterleaved_МоноФайл_ДаётОдинКанал()
+    {
+        using var stream = new MemoryStream();
+        WavCodec.WritePcm16(stream, [0.5f, -0.25f], 44100);
+
+        stream.Position = 0;
+        var result = WavCodec.ReadInterleaved(stream);
+
+        Assert.Equal(1, result.Channels);
+        Assert.Equal(2, result.FrameCount);
+    }
+
+    [Fact]
     public void WritePcm16_НечисловыеСэмплыСтановятсяТихой()
     {
         // Math.Clamp на NaN пропускает значение насквозь, а (short)float.NaN в C# не

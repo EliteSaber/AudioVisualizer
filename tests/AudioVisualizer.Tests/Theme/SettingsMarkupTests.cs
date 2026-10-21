@@ -78,6 +78,20 @@ public class SettingsMarkupTests
     }
 
     [Fact]
+    public void ПодсказкаЭквалайзераВЗвуке_ЗаданаНаСтроке()
+    {
+        var row = Row("Эквалайзер в звуке");
+
+        Assert.False(string.IsNullOrWhiteSpace((string?)row.Attribute("ToolTip")));
+
+        // На самом чекбоксе подсказки быть не должно: иначе текст живёт в двух местах
+        // и правки разъезжаются, а над подписью его не будет.
+        var checkbox = row.Descendants().Single(element => element.Name.LocalName == "CheckBox");
+
+        Assert.Null(checkbox.Attribute("ToolTip"));
+    }
+
+    [Fact]
     public void ПодсказкаКодировщиков_СкрытаКогдаГоворитьНечего()
     {
         // При найденной видеокарте сообщения нет вовсе, а блок с отступом всё равно держал бы

@@ -18,6 +18,20 @@ public static class WavCodec
 
     public static AudioData Read(Stream stream)
     {
+        var channels = ReadInterleaved(stream);
+
+        return new AudioData(channels.ToMonoMix(), channels.SampleRate);
+    }
+
+    /// <summary>
+    /// Разбор WAV с сохранением каналов: сэмплы идут чересполосно.
+    /// </summary>
+    /// <remarks>
+    /// Моно-микс получается сводом каналов, и звук ролика без такого свода не совпал бы
+    /// с исходником: свод теряет 3 дБ на разнесённых дорожках.
+    /// </remarks>
+    public static ChannelAudio ReadInterleaved(Stream stream)
+    {
         ArgumentNullException.ThrowIfNull(stream);
 
         using var reader = new BinaryReader(stream, Encoding.ASCII, leaveOpen: true);
@@ -90,21 +104,34 @@ public static class WavCodec
         }
 
         var samples = Convert(payload, format, bitsPerSample, channels);
+
         if (samples.Length == 0)
         {
             throw new InvalidDataException("WAV не содержит ни одного сэмпла.");
         }
 
-        return new AudioData(samples, sampleRate);
+        return new ChannelAudio(samples, channels, sampleRate);
     }
 
-    public static void WritePcm16(Stream stream, ReadOnlySpan<float> samples, int sampleRate)
+    public static void WritePcm16(Stream stream, ReadOnlySpan<float> samples, int sampleRate, int channels = 1)
     {
         ArgumentNullException.ThrowIfNull(stream);
 
         if (sampleRate <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(sampleRate), sampleRate, "Частота дискретизации должна быть положительной.");
+        }
+
+        if (channels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(channels), channels, "Число каналов должно быть положительным.");
+        }
+
+        if (samples.Length % channels != 0)
+        {
+            throw new ArgumentException(
+                $"Число сэмплов ({samples.Length}) не делится на число каналов ({channels}).",
+                nameof(samples));
         }
 
         var dataSize = samples.Length * 2;
@@ -116,10 +143,13 @@ public static class WavCodec
         writer.Write("fmt "u8);
         writer.Write(16);
         writer.Write((short)FormatPcm);
-        writer.Write((short)1);
+        writer.Write((short)channels);
         writer.Write(sampleRate);
-        writer.Write(sampleRate * 2);
-        writer.Write((short)2);
+
+        // Байт в секунду и размер кадра считаются по числу каналов: без этого ffmpeg
+        // прочитает стерео-файл как сдвинутый на полкадра.
+        writer.Write(sampleRate * 2 * channels);
+        writer.Write((short)(2 * channels));
         writer.Write((short)16);
         writer.Write("data"u8);
         writer.Write(dataSize);
@@ -149,12 +179,12 @@ public static class WavCodec
         }
     }
 
-    public static void WritePcm16(string path, ReadOnlySpan<float> samples, int sampleRate)
+    public static void WritePcm16(string path, ReadOnlySpan<float> samples, int sampleRate, int channels = 1)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         using var stream = File.Create(path);
-        WritePcm16(stream, samples, sampleRate);
+        WritePcm16(stream, samples, sampleRate, channels);
     }
 
     private static float[] Convert(byte[] payload, int format, int bitsPerSample, int channels)
@@ -171,23 +201,24 @@ public static class WavCodec
         var blockAlign = bytesPerSample * channels;
         var frameCount = payload.Length / blockAlign;
 
-        var samples = new float[frameCount];
+        // Сэмплы идут чересполосно: кадр занимает по одному сэмплу на канал.
+        var samples = new float[frameCount * channels];
         for (var frame = 0; frame < frameCount; frame++)
         {
-            var sum = 0f;
             var offset = frame * blockAlign;
 
             for (var channel = 0; channel < channels; channel++)
             {
                 var index = offset + (channel * bytesPerSample);
-                sum += isFloat
+
+                // Нечисловой сэмпл декодера иначе испортил бы весь кадр: сумма каналов с таким
+                // значением остаётся нечисловой и уезжает дальше в столбики и в WAV для ffmpeg.
+                var value = isFloat
                     ? BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(payload.AsSpan(index)))
                     : BinaryPrimitives.ReadInt16LittleEndian(payload.AsSpan(index)) / 32768f;
-            }
 
-            // Нечисловые сэмплы в float-WAV возможны, а сумма каналов с таким значением портит весь
-            // кадр: сумма остаётся нечисловой и уезжает дальше в столбики и в WAV для ffmpeg.
-            samples[frame] = AudioData.Finite(sum / channels);
+                samples[(frame * channels) + channel] = AudioData.Finite(value);
+            }
         }
 
         return samples;

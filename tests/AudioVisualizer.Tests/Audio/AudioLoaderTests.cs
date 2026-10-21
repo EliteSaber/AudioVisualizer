@@ -65,6 +65,29 @@ public class AudioLoaderTests
     }
 
     [Fact]
+    public void LoadChannels_СтереоWav_СохраняетКаналы()
+    {
+        // Левый канал 1.0, правый -1.0. Свёрнутый в моно сигнал был бы нулём, а с
+        // сохранёнными каналами ролик звучит как исходник.
+        var stereo = new short[8000 * 2];
+        for (var frame = 0; frame < 8000; frame++)
+        {
+            stereo[frame * 2] = short.MaxValue;
+            stereo[(frame * 2) + 1] = short.MinValue;
+        }
+
+        var content = RawWav.Build(format: 1, channels: 2, sampleRate: 8000, bitsPerSample: 16, RawWav.Pcm16(stereo));
+        using var file = new TemporaryAudioFile(content);
+
+        var result = new AudioLoader().LoadChannels(file.Path);
+
+        Assert.Equal(2, result.Channels);
+        Assert.Equal(8000, result.FrameCount);
+        Assert.Equal(1f, result.Samples[0], 3);
+        Assert.Equal(-1f, result.Samples[1], 3);
+    }
+
+    [Fact]
     public void Load_ОтсутствующийФайл_ВыбрасываетFileNotFoundException()
         => Assert.Throws<FileNotFoundException>(() => new AudioLoader().Load(@"Z:\нет\такого.wav"));
 

@@ -1,3 +1,5 @@
+using AudioVisualizer.Core.Settings;
+
 namespace AudioVisualizer.Core.Audio;
 
 /// <summary>
@@ -19,6 +21,8 @@ public sealed class AudioPlayer : IAudioPlayer
     private string? _openedPath;
     private TimeSpan _position;
     private double _volume = 1d;
+    private IReadOnlyList<EqualizerBand> _equalizerBands = [];
+    private bool _equalizerEnabled;
 
     public AudioPlayer(Func<string, IAudioTrack>? trackFactory = null, Func<IAudioOutput>? outputFactory = null)
     {
@@ -55,6 +59,24 @@ public sealed class AudioPlayer : IAudioPlayer
         {
             _track.Volume = (float)_volume;
         }
+    }
+
+    /// <summary>
+    /// Задаёт полосы эквалайзера для звука при воспроизведении.
+    /// </summary>
+    /// <remarks>
+    /// Полосы живут в плеере, а не в модели представления: файл открывается и переоткрывается
+    /// при перемотке, и каждый раз эквалайзер должен был бы узнавать о них заново. Как и
+    /// громкость, полосы переживают смену трека.
+    /// </remarks>
+    public void SetEqualizer(IReadOnlyList<EqualizerBand> bands, bool enabled)
+    {
+        ArgumentNullException.ThrowIfNull(bands);
+
+        _equalizerBands = bands;
+        _equalizerEnabled = enabled;
+
+        _track?.SetEqualizer(_equalizerBands, _equalizerEnabled);
     }
 
     public void Pause()
@@ -126,6 +148,7 @@ public sealed class AudioPlayer : IAudioPlayer
     {
         _track = _trackFactory(path);
         _track.Volume = (float)_volume;
+        _track.SetEqualizer(_equalizerBands, _equalizerEnabled);
 
         if (startAt > TimeSpan.Zero)
         {

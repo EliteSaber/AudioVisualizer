@@ -1,4 +1,5 @@
 using AudioVisualizer.Core.Audio;
+using AudioVisualizer.Core.Settings;
 
 namespace AudioVisualizer.Tests.Audio;
 
@@ -23,6 +24,11 @@ internal sealed class FakeAudioPlayer : IAudioPlayer
 
     public List<double> SetVolumes { get; } = [];
 
+    /// <summary>Какие полосы эквалайзера задавали плееру и в каком порядке.</summary>
+    public List<IReadOnlyList<EqualizerBand>> Equalizers { get; } = [];
+
+    public bool EqualizerEnabled { get; private set; }
+
     public List<TimeSpan> Seeks { get; } = [];
 
     public Exception? PlayFailure { get; set; }
@@ -41,6 +47,12 @@ internal sealed class FakeAudioPlayer : IAudioPlayer
     }
 
     public void SetVolume(double volume) => SetVolumes.Add(volume);
+
+    public void SetEqualizer(IReadOnlyList<EqualizerBand> bands, bool enabled)
+    {
+        Equalizers.Add(bands);
+        EqualizerEnabled = enabled;
+    }
 
     public void Pause()
     {

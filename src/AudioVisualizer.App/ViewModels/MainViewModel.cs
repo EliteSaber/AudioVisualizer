@@ -77,6 +77,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Settings = new SettingsViewModel(stored, presetStore, detectors);
         Settings.Changed += OnSettingsChanged;
 
+        // Эквалайзер живёт в плеере, и полосы приходят в него при каждой правке. При запуске
+        // правки ещё не было, поэтому полосы задаются один раз здесь.
+        var initial = Settings.ToAppSettings().Spectrum;
+        _player.SetEqualizer(initial.Equalizer, initial.ApplyEqualizerToAudio);
+
         // Громкость ставится полю напрямую, а не свойством: при загрузке она не правка
         // пользователя, и отложенная запись из-за неё стартовать не должна. В плеер она
         // идёт синхронно: иначе открытый после запуска трек звучал бы громче, чем стоит
@@ -233,14 +238,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private static string DescribeEncoder(VideoExportResult result)
     {
+        var notes = new List<string>();
+
         if (!string.IsNullOrEmpty(result.Encoder))
         {
-            return $"Кодировала видеокарта ({result.Encoder}).";
+            notes.Add($"Кодировала видеокарта ({result.Encoder}).");
+        }
+        else if (result.FellBackToCpu)
+        {
+            notes.Add("Кодировал процессор: видеокарта не нашлась или не умеет выбранный кодек.");
         }
 
-        return result.FellBackToCpu
-            ? "Кодировал процессор: видеокарта не нашлась или не умеет выбранный кодек."
-            : string.Empty;
+        if (result.FellBackToMono)
+        {
+            // Исходник не прочитался, и звук ролика собран из моно-микса: он тише на 3 дБ
+            // и без пространства. Молчать об этом нельзя - ролик вышел другим.
+            notes.Add("Звук ролика вышел моно: исходник не удалось прочитать заново.");
+        }
+
+        return string.Join(Environment.NewLine, notes);
     }
 
     private void SetStatus(string text, bool isError = false, string? detail = null)
@@ -467,7 +483,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Pause();
         StopTimer();
 
-        var request = new VideoExportRequest(_audio, Settings.ToAppSettings(), outputPath);
+        // Исходник нужен выгрузке для звука с каналами: моно-микс, на котором построен
+        // спектр, тише на 3 дБ и без пространства.
+        var request = new VideoExportRequest(_audio, Settings.ToAppSettings(), outputPath, _audioPath);
 
         // Источник отмены живёт в локальной переменной, а поле нужно только кнопке «отмена».
         // При закрытии окна поле обнуляется, и обращение к нему в конце выгрузки упало бы.
@@ -772,6 +790,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ScheduleSave();
 
         var settings = SettingsNormalizer.Normalize(Settings.ToAppSettings());
+
+        // Полосы эквалайзера едут в плеер сразу: файл при этом не переоткрывается, и
+        // положение звука не сбивается.
+        _player.SetEqualizer(settings.Spectrum.Equalizer, settings.Spectrum.ApplyEqualizerToAudio);
 
         PreviewWidth = settings.Export.Width;
         PreviewHeight = settings.Export.Height;

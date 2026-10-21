@@ -120,14 +120,20 @@ public sealed class Mp4Exporter : IVideoExporter
 
         Process? process = null;
         StringBuilder errors = new();
+        var fellBackToMono = false;
 
         try
         {
+            // Звук ролика готовится до старта ffmpeg: он декодируется из исходника с
+            // каналами, к нему применяются полосы эквалайзера, и пик ограничивается.
+            var audio = await PrepareAudioAsync(request, settings, pathVariable, cancellationToken).ConfigureAwait(false);
+            fellBackToMono = audio.FellBackToMono;
+
             // WAV пишется до старта ffmpeg: запусти мы процесс раньше, он открыл бы файл,
             // которого ещё нет, а File.Create держит его без разделения. Побочная выгода -
             // запись уходит с потока интерфейса, а на треке в четыре минуты идёт секунды.
             await Task.Run(
-                () => WavCodec.WritePcm16(temporaryAudio, request.Audio.Samples, request.Audio.SampleRate),
+                () => WavCodec.WritePcm16(temporaryAudio, audio.Samples, audio.SampleRate, audio.Channels),
                 CancellationToken.None);
 
             // Отдельное имя нужно, чтобы тип был Process, а не Process?: в лямбде отмены
@@ -164,7 +170,7 @@ public sealed class Mp4Exporter : IVideoExporter
                 {
                     case FrameWriteOutcome.Cancelled:
                         return new VideoExportResult(
-                            outputPath, written.Frames, stopwatch.Elapsed, Cancelled: true, Encoder: encoder, FellBackToCpu: fellBackToCpu);
+                            outputPath, written.Frames, stopwatch.Elapsed, Cancelled: true, Encoder: encoder, FellBackToCpu: fellBackToCpu, FellBackToMono: fellBackToMono);
 
                     case FrameWriteOutcome.Stalled:
                         throw new VideoExportException(DescribeStall(export.AacCoder, errors, command));
@@ -201,7 +207,7 @@ public sealed class Mp4Exporter : IVideoExporter
                 }
 
                 return new VideoExportResult(
-                    outputPath, written.Frames, stopwatch.Elapsed, Encoder: encoder, FellBackToCpu: fellBackToCpu);
+                    outputPath, written.Frames, stopwatch.Elapsed, Encoder: encoder, FellBackToCpu: fellBackToCpu, FellBackToMono: fellBackToMono);
             }
             finally
             {
@@ -233,6 +239,50 @@ public sealed class Mp4Exporter : IVideoExporter
     /// <summary>Команда ffmpeg одной строкой: её можно скопировать и повторить руками.</summary>
     private static string FormatCommand(string ffmpegPath, IEnumerable<string> arguments)
         => string.Join(' ', arguments.Prepend(ffmpegPath));
+
+    /// <summary>
+    /// Готовит аудиодорожку ролика.
+    /// </summary>
+    /// <remarks>
+    /// Звук берётся из исходника с каналами: моно-микс, на котором построен спектр, теряет
+    /// на своде 3 дБ и местами вычитает фазу, и ролик звучал бы хуже исходника. Исходник
+    /// декодируется заново: держать его в памяти всё время стоило бы вдвое больше памяти,
+    /// чем нужно, а декодирование занимает секунды.
+    /// </remarks>
+    private static async Task<PreparedAudio> PrepareAudioAsync(
+        VideoExportRequest request,
+        AppSettings settings,
+        string? pathVariable,
+        CancellationToken cancellationToken)
+    {
+        var spectrum = settings.Spectrum;
+        var hasSource = !string.IsNullOrWhiteSpace(request.AudioPath);
+
+        if (hasSource)
+        {
+            try
+            {
+                var loader = new AudioLoader(new FfmpegLocator(settings.Export.FfmpegPath, pathVariable));
+                var audio = await loader.LoadChannelsAsync(request.AudioPath!, cancellationToken).ConfigureAwait(false);
+
+                ExportAudio.PrepareChannels(audio, spectrum);
+
+                return new PreparedAudio(audio.Samples, audio.SampleRate, audio.Channels, false);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // Исходник переехал или удалён: ролик соберётся из моно-микса, который уже
+                // в памяти, а вызывающий скажет, что звук вышел моно.
+            }
+        }
+
+        var mono = ExportAudio.PrepareMono(request.Audio, spectrum);
+
+        return new PreparedAudio(mono, request.Audio.SampleRate, 1, hasSource);
+    }
+
+    /// <summary>Звук, готовый к записи во временный WAV.</summary>
+    private sealed record PreparedAudio(float[] Samples, int SampleRate, int Channels, bool FellBackToMono);
 
     /// <summary>
     /// Превращает пожелание настройки в имя кодировщика. Пустое имя означает «кодировать

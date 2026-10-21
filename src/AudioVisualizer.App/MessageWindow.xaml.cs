@@ -68,6 +68,11 @@ public partial class MessageWindow : Window
         var window = new MessageWindow(notice) { Owner = owner };
 
         window.ShowDialog();
+
+        // Передний план возвращается владельцу явно: Windows после закрытия окна активирует
+        // не владельца, а то приложение, которое было активно до него. Звать надо именно
+        // здесь: пока окно модальное, владелец выключен, и активировать его нельзя.
+        OwnerActivation.Restore(owner);
     }
 
     private static void OpenInExplorer(string path)

@@ -222,6 +222,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public Action<Notice>? NoticeRequested { get; set; }
 
     /// <summary>
+    /// Показывает диалог открытия или сохранения файла. Задаёт окно.
+    /// </summary>
+    /// <remarks>
+    /// Диалог без владельца не модален к главному окну: человек может щёлкнуть по главному
+    /// окну, и диалог уедет под него. С владельцем модальность настоящая, и после закрытия
+    /// Windows знает, кому вернуть передний план.
+    ///
+    /// Показывает диалог сама модель не может: окна у неё нет, а у окна оно есть. Без окна
+    /// (в тестах) команда ничего не делает - иначе тест открыл бы настоящий диалог.
+    /// </remarks>
+    public Func<FileDialog, bool?>? FileDialogRequested { get; set; }
+
+    /// <summary>
     /// Пишет сообщение в строку статуса и сразу помечает его ошибкой или нет. Через один
     /// метод, а не присваиванием напрямую: обычное сообщение обязано гасить красный цвет
     /// предыдущей ошибки, а забытое присваивание оставило бы её навсегда.
@@ -320,11 +333,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Filter = AudioFileFilter
         };
 
-        if (dialog.ShowDialog() == true)
+        if (ShowFileDialog(dialog) == true)
         {
             await LoadFileAsync(dialog.FileName);
         }
     }
+
+    /// <summary>Показывает диалог через окно: у диалога должен быть владелец.</summary>
+    private bool? ShowFileDialog(FileDialog dialog) => FileDialogRequested?.Invoke(dialog);
 
     /// <summary>
     /// Пишет настройки в файл. Кнопки в панели нет: то же самое происходит при выходе из
@@ -442,7 +458,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             FileName = _audioPath is null ? "видео.mp4" : Path.GetFileNameWithoutExtension(_audioPath) + ".mp4"
         };
 
-        if (dialog.ShowDialog() == true)
+        if (ShowFileDialog(dialog) == true)
         {
             await ExportVideoAsync(dialog.FileName);
         }

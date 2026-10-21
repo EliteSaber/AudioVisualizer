@@ -63,6 +63,19 @@ public partial class MainWindow : Window
             }
         };
 
+        // Диалоги открытия и сохранения показывает окно: у диалога должен быть владелец,
+        // иначе он не модален к главному окну, а после закрытия передний план забирает
+        // приложение, активное до него.
+        viewModel.FileDialogRequested = dialog =>
+        {
+            var result = dialog.ShowDialog(this);
+
+            // Передний план возвращается явно - см. OwnerActivation.
+            OwnerActivation.Restore(this);
+
+            return result;
+        };
+
         DataContext = viewModel;
         Closed += OnClosed;
     }

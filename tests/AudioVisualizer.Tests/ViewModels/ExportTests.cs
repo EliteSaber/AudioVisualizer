@@ -301,6 +301,31 @@ public class ExportTests
         }
     }
 
+    [Fact]
+    public async Task СохранениеВидео_ИдётЧерезОкно()
+    {
+        var (viewModel, exporter, directory, _) = Create();
+        using (directory)
+        {
+            await viewModel.LoadFileAsync(SharedSine.Path);
+
+            var output = Path.Combine(directory.Root, "итог.mp4");
+
+            // Диалог сохранения показывает окно, и путь выгрузки берётся из его результата:
+            // без окна модель знать неоткуда.
+            viewModel.FileDialogRequested = dialog =>
+            {
+                dialog.FileName = output;
+                return true;
+            };
+
+            await viewModel.ExportVideoCommand.ExecuteAsync(null);
+
+            var request = Assert.Single(exporter.Requests);
+            Assert.Equal(output, request.OutputPath);
+        }
+    }
+
     private static (MainViewModel ViewModel, FakeVideoExporter Exporter, TemporaryDirectory Directory, FakeAudioPlayer Player) Create()
     {
         var directory = new TemporaryDirectory();

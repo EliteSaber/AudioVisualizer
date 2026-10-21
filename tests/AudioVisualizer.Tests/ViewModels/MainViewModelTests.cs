@@ -378,6 +378,42 @@ using var sine = SineWav();
         }
     }
 
+    [Fact]
+    public async Task ОткрытиеФайла_ИдётЧерезОкно()
+    {
+        using var sine = SineWav();
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            // Диалог показывает окно: у него должен быть владелец, иначе он не модален
+            // к главному окну, а после закрытия передний план забирает чужое приложение.
+            // Модель только спрашивает и берёт результат.
+            viewModel.FileDialogRequested = dialog =>
+            {
+                dialog.FileName = sine.Path;
+                return true;
+            };
+
+            await viewModel.OpenFileCommand.ExecuteAsync(null);
+
+            Assert.True(viewModel.HasTrack);
+        }
+    }
+
+    [Fact]
+    public async Task ОткрытиеФайла_БезОкна_НичегоНеДелает()
+    {
+        var (viewModel, directory) = CreateViewModel();
+        using (directory)
+        {
+            // Окна нет - показывать нечем. Модель показывать диалог сама не должна:
+            // в тесте он был бы настоящим и встал бы насмерть.
+            await viewModel.OpenFileCommand.ExecuteAsync(null);
+
+            Assert.False(viewModel.HasTrack);
+        }
+    }
+
     private static int ReadWidth(string path)
         => JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path)).GetProperty("Bars").GetProperty("Width").GetInt32();
 

@@ -14,6 +14,11 @@
       из разметки, которой здесь нет.
     -->
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+
+    <!--
+      Языковые ресурсы .NET: оставляем только русский.
+    -->
+    <SatelliteResourceLanguages>ru</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>

@@ -47,9 +47,11 @@ jobs:
       - name: Тесты
         run: dotnet test AudioVisualizer.sln -c Release --no-build
 
-      - name: Публикация лёгкой сборки
-        run: dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained false -p:Version=${{ steps.ver.outputs.version }} -o artifacts/framework --nologo
+      # Лёгкая сборка: один exe, все dll внутри. Нужен .NET 10 Desktop Runtime.
+      - name: Публикация лёгкой сборки одним файлом
+        run: dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:Version=${{ steps.ver.outputs.version }} -o artifacts/single --nologo
 
+      # Тяжёлая сборка: папка со своим рантаймом, запускается без установленного .NET.
       - name: Публикация сборки со своим рантаймом
         run: dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained true -p:Version=${{ steps.ver.outputs.version }} -o artifacts/selfcontained --nologo
 
@@ -57,16 +59,16 @@ jobs:
         shell: pwsh
         run: |
           $version = '${{ steps.ver.outputs.version }}'
-          $packs = @(
-            @{ Source = 'artifacts/framework';     Name = "AudioVisualizer-$version-win-x64" },
-            @{ Source = 'artifacts/selfcontained'; Name = "AudioVisualizer-$version-win-x64-selfcontained" }
-          )
-          foreach ($pack in $packs) {
-            $stage = Join-Path 'artifacts/stage' $pack.Name
-            New-Item -ItemType Directory -Path $stage -Force | Out-Null
-            Copy-Item (Join-Path $pack.Source '*') $stage -Recurse -Force
-            Compress-Archive -Path $stage -DestinationPath "artifacts/$($pack.Name).zip" -CompressionLevel Optimal
-          }
+
+          # Лёгкий вариант отдаём одним файлом: settings.json приложение создаёт рядом с
+          # exe само, а в bundle он не попадает.
+          Copy-Item 'artifacts/single/AudioVisualizer.App.exe' "artifacts/AudioVisualizer-$version-win-x64.exe" -Force
+
+          # Тяжёлый вариант - папка в архиве, иначе файлы распадутся по "Загрузкам".
+          $stage = "artifacts/stage/AudioVisualizer-$version-win-x64-selfcontained"
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item 'artifacts/selfcontained/*' $stage -Recurse -Force
+          Compress-Archive -Path $stage -DestinationPath "artifacts/AudioVisualizer-$version-win-x64-selfcontained.zip" -CompressionLevel Optimal
 
       - name: Создание релиза
         shell: pwsh
@@ -78,7 +80,7 @@ jobs:
         run: |
           $notes = "docs/releases/$env:VERSION.md"
           $arguments = @('release', 'create', $env:TAG)
-          $arguments += Get-ChildItem 'artifacts/*.zip' | ForEach-Object { $_.FullName }
+          $arguments += Get-ChildItem 'artifacts/*.zip', 'artifacts/*.exe' | ForEach-Object { $_.FullName }
           $arguments += @('--title', "AudioVisualizer $env:VERSION")
           if (Test-Path $notes) { $arguments += @('--notes-file', $notes) } else { $arguments += '--generate-notes' }
           if ($env:PRERELEASE -eq 'True') { $arguments += '--prerelease' }

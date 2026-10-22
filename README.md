@@ -37,9 +37,11 @@
 Готовые сборки лежат на странице релизов:
 https://github.com/EliteSaber/AudioVisualizer/releases/latest
 
-- `AudioVisualizer-1.0.0-win-x64.zip` — около 1 МБ, нужен .NET 10 Desktop Runtime;
-- `AudioVisualizer-1.0.0-win-x64-selfcontained.zip` — около 73 МБ, ничего доустанавливать
+- `AudioVisualizer-1.0.0-win-x64.exe` — один файл, около 2 МБ, нужен .NET 10 Desktop Runtime;
+- `AudioVisualizer-1.0.0-win-x64-selfcontained.zip` — около 68 МБ, ничего доустанавливать
   не надо.
+
+Настройки пишутся рядом с exe.
 
 ffmpeg в комплект не входит, без него выгрузка mp4 невозможна, а прослушивание mp3 и wav
 работает и без него. Путь задаётся в настройках на вкладке «Экспорт», иначе ffmpeg ищется в
@@ -84,13 +86,13 @@ dotnet run --project src/AudioVisualizer.App
 В Visual Studio 2026 — F5. В VS Code — F5 или задачи `build`, `run`, `test`, `clean`.
 Тесты запускаются отдельно: `dotnet test`.
 
-Опубликованная сборка, framework-dependent x64:
+Опубликованная сборка одним файлом, framework-dependent x64, все библиотеки внутри exe.
 
 ```
-dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained false -p:Version=1.0.0
+dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:Version=1.0.0
 ```
 
-Сборка со своим рантаймом: файлов больше, зато .NET устанавливать не нужно.
+Сборка со своим рантаймом, .NET устанавливать не нужно.
 
 ```
 dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained true -p:Version=1.0.0
@@ -98,7 +100,7 @@ dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained tr
 
 Готовый exe лежит в `src\AudioVisualizer.App\bin\Release\net10.0-windows\win-x64\publish`.
 Рядом с ним нужен `settings.json` — публикация копирует его сама, иначе при первом запуске
-читать будет нечего.
+читать будет нечего. В однофайловой сборке программа создаёт файл сама.
 
 ## Структура
 

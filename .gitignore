@@ -480,3 +480,8 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Заметки к релизам лежат в docs\releases, а шаблон .gitignore выше прячет любой каталог
+# releases - вернуть свой.
+!docs/releases/
+!docs/releases/**

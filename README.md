@@ -6,6 +6,8 @@
 
 </div>
 
+[![Release](https://img.shields.io/github/v/release/EliteSaber/AudioVisualizer.svg)](https://github.com/EliteSaber/AudioVisualizer/releases/latest)
+
 Приложение загружает аудиофайл, показывает спектр в реальном времени и выгружает mp4 с
 визуализацией. Столбики расходятся от центральной линии зеркально вверх и вниз.
 
@@ -30,10 +32,27 @@
 Звук ролика берётся из исходника. Спектр считается по сведённому сигналу (моно), для картинки
 этого достаточно.
 
+## Скачать
+
+Готовые сборки лежат на странице релизов:
+https://github.com/EliteSaber/AudioVisualizer/releases/latest
+
+- `AudioVisualizer-1.0.0-win-x64.zip` — около 1 МБ, нужен .NET 10 Desktop Runtime;
+- `AudioVisualizer-1.0.0-win-x64-selfcontained.zip` — около 73 МБ, ничего доустанавливать
+  не надо.
+
+ffmpeg в комплект не входит, без него выгрузка mp4 невозможна, а прослушивание mp3 и wav
+работает и без него. Путь задаётся в настройках на вкладке «Экспорт», иначе ffmpeg ищется в
+PATH.
+
+exe не подписан, поэтому Windows может показать предупреждение SmartScreen: «Подробнее» →
+«Выполнить».
+
 ## Требования
 
-- Windows;
-- .NET 10 SDK — чтобы собрать и запустить из исходников;
+- Windows 10/11 x64;
+- .NET 10 Desktop Runtime — чтобы запустить готовую сборку; .NET 10 SDK нужен, только если
+  собираете из исходников;
 - ffmpeg — нужен не всегда. mp3, wav и aiff декодирует встроенный NAudio вместе с Media
   Foundation, и для них превью работает без ffmpeg. А вот выгрузка mp4 без него
   невозможна, и файлы, которые встроенный декодер не открывает (flac, ogg, opus, m4a,
@@ -68,7 +87,13 @@ dotnet run --project src/AudioVisualizer.App
 Опубликованная сборка, framework-dependent x64:
 
 ```
-dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained false
+dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained false -p:Version=1.0.0
+```
+
+Сборка со своим рантаймом: файлов больше, зато .NET устанавливать не нужно.
+
+```
+dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained true -p:Version=1.0.0
 ```
 
 Готовый exe лежит в `src\AudioVisualizer.App\bin\Release\net10.0-windows\win-x64\publish`.
@@ -81,7 +106,10 @@ dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained fa
 AudioVisualizer.sln
 Directory.Build.props              общие настройки компиляции для всех проектов
 .editorconfig                      правила оформления кода
+LICENSE                            лицензия MIT
 docs\logo.png                       логотип для шапки этого файла
+docs\releases\                      заметки к релизам: их читает публикация на GitHub
+.github\workflows\                 тесты на каждом коммите и сборка релиза по тегу
 src\AudioVisualizer.Core\          FFT, декодирование, модель настроек, рендер столбиков, сборка команды экспорта
 src\AudioVisualizer.App\           окно, модели представления, панели настроек
 src\AudioVisualizer.App\Assets\    иконка приложения и её мастер-PNG 1024×1024

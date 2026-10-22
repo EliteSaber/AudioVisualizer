@@ -1,0 +1,31 @@
+name: CI
+
+# Проверки на каждый коммит: сборка и тесты. Релиз здесь не создаётся - за него отвечает
+# release.yml, который срабатывает только на теге.
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Восстановление пакетов
+        run: dotnet restore AudioVisualizer.sln
+
+      - name: Сборка
+        run: dotnet build AudioVisualizer.sln -c Release --no-restore
+
+      # Тест с настоящим ffmpeg молча проходит, если ffmpeg на машине нет. На образе
+      # windows-latest ffmpeg есть, поэтому выгрузка mp4 проверяется по-настоящему.
+      - name: Тесты
+        run: dotnet test AudioVisualizer.sln -c Release --no-build

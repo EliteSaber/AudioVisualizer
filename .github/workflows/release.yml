@@ -1,0 +1,85 @@
+name: Release
+
+# Релиз создаётся только по тегу вида v*. Коммит в master ничего не публикует: сборка и
+# тесты на коммитах - работа ci.yml.
+#
+# Порядок для автора релиза:
+#   git tag v1.0.0
+#   git push origin v1.0.0
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # История нужна целиком: из неё собираются заметки, если файла с ними нет.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Версия из тега
+        id: ver
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw "Тег '${{ github.ref_name }}' не похож на версию"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$($version -match '-')" >> $env:GITHUB_OUTPUT
+
+      - name: Восстановление пакетов
+        run: dotnet restore AudioVisualizer.sln
+
+      - name: Сборка
+        run: dotnet build AudioVisualizer.sln -c Release --no-restore
+
+      - name: Тесты
+        run: dotnet test AudioVisualizer.sln -c Release --no-build
+
+      - name: Публикация лёгкой сборки
+        run: dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained false -p:Version=${{ steps.ver.outputs.version }} -o artifacts/framework --nologo
+
+      - name: Публикация сборки со своим рантаймом
+        run: dotnet publish src/AudioVisualizer.App -c Release -r win-x64 --self-contained true -p:Version=${{ steps.ver.outputs.version }} -o artifacts/selfcontained --nologo
+
+      - name: Упаковка
+        shell: pwsh
+        run: |
+          $version = '${{ steps.ver.outputs.version }}'
+          $packs = @(
+            @{ Source = 'artifacts/framework';     Name = "AudioVisualizer-$version-win-x64" },
+            @{ Source = 'artifacts/selfcontained'; Name = "AudioVisualizer-$version-win-x64-selfcontained" }
+          )
+          foreach ($pack in $packs) {
+            $stage = Join-Path 'artifacts/stage' $pack.Name
+            New-Item -ItemType Directory -Path $stage -Force | Out-Null
+            Copy-Item (Join-Path $pack.Source '*') $stage -Recurse -Force
+            Compress-Archive -Path $stage -DestinationPath "artifacts/$($pack.Name).zip" -CompressionLevel Optimal
+          }
+
+      - name: Создание релиза
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          PRERELEASE: ${{ steps.ver.outputs.prerelease }}
+        run: |
+          $notes = "docs/releases/$env:VERSION.md"
+          $arguments = @('release', 'create', $env:TAG)
+          $arguments += Get-ChildItem 'artifacts/*.zip' | ForEach-Object { $_.FullName }
+          $arguments += @('--title', "AudioVisualizer $env:VERSION")
+          if (Test-Path $notes) { $arguments += @('--notes-file', $notes) } else { $arguments += '--generate-notes' }
+          if ($env:PRERELEASE -eq 'True') { $arguments += '--prerelease' }
+          & gh @arguments
